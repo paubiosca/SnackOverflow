@@ -1,29 +1,40 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { useProfile } from '@/hooks/useProfile';
 import { useFoodEntries } from '@/hooks/useFoodEntries';
-import { MealType } from '@/lib/types';
+import { MealType, FoodEntry } from '@/lib/types';
 import Card from '@/components/ui/Card';
 import BottomNav from '@/components/ui/BottomNav';
 import CalorieSummary from '@/components/dashboard/CalorieSummary';
 import MacroBreakdown from '@/components/dashboard/MacroBreakdown';
 import MealSection from '@/components/dashboard/MealSection';
 import WaterTracker from '@/components/dashboard/WaterTracker';
+import EditFoodModal from '@/components/food/EditFoodModal';
 
 export default function Dashboard() {
   const router = useRouter();
-  const { profile, isLoading: profileLoading, isOnboarded, calorieGoal, macroTargets } = useProfile();
-  const { entries, totals, getEntriesByMeal, remove, isLoading: entriesLoading } = useFoodEntries();
+  const { status } = useSession();
+  const { profile, isLoading: profileLoading, isOnboarded, isAuthenticated, calorieGoal, macroTargets } = useProfile();
+  const { entries, totals, getEntriesByMeal, remove, update, isLoading: entriesLoading } = useFoodEntries();
+  const [editingEntry, setEditingEntry] = useState<FoodEntry | null>(null);
 
   useEffect(() => {
-    if (!profileLoading && !isOnboarded) {
+    if (status === 'loading') return;
+
+    if (status === 'unauthenticated') {
+      router.push('/login');
+      return;
+    }
+
+    if (!profileLoading && isAuthenticated && !isOnboarded) {
       router.push('/onboarding');
     }
-  }, [profileLoading, isOnboarded, router]);
+  }, [status, profileLoading, isOnboarded, isAuthenticated, router]);
 
-  if (profileLoading || entriesLoading || !isOnboarded) {
+  if (status === 'loading' || profileLoading || entriesLoading || !isOnboarded) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -71,9 +82,19 @@ export default function Dashboard() {
             mealType={mealType}
             entries={getEntriesByMeal(mealType)}
             onDelete={remove}
+            onEdit={setEditingEntry}
           />
         ))}
       </div>
+
+      {/* Edit Food Modal */}
+      <EditFoodModal
+        entry={editingEntry}
+        isOpen={!!editingEntry}
+        onClose={() => setEditingEntry(null)}
+        onSave={update}
+        onDelete={remove}
+      />
 
       <BottomNav />
     </main>

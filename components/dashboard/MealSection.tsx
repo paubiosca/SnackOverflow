@@ -7,9 +7,10 @@ interface MealSectionProps {
   mealType: MealType;
   entries: FoodEntry[];
   onDelete: (id: string) => void;
+  onEdit?: (entry: FoodEntry) => void;
 }
 
-export default function MealSection({ mealType, entries, onDelete }: MealSectionProps) {
+export default function MealSection({ mealType, entries, onDelete, onEdit }: MealSectionProps) {
   const totalCalories = entries.reduce((sum, e) => sum + e.calories, 0);
 
   return (
@@ -35,7 +36,8 @@ export default function MealSection({ mealType, entries, onDelete }: MealSection
           {entries.map((entry) => (
             <div
               key={entry.id}
-              className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors group"
+              className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors group cursor-pointer"
+              onClick={() => onEdit?.(entry)}
             >
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-text-primary truncate">{entry.name}</p>
@@ -48,7 +50,7 @@ export default function MealSection({ mealType, entries, onDelete }: MealSection
                   {entry.calories} kcal
                 </span>
                 <button
-                  onClick={() => onDelete(entry.id)}
+                  onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
                   className="opacity-0 group-hover:opacity-100 transition-opacity text-accent-red p-1"
                   aria-label="Delete entry"
                 >

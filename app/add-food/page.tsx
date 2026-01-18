@@ -10,8 +10,9 @@ import Card from '@/components/ui/Card';
 import CameraCapture from '@/components/food/CameraCapture';
 import AIAnalysis from '@/components/food/AIAnalysis';
 import ManualEntry from '@/components/food/ManualEntry';
+import TextEntry from '@/components/food/TextEntry';
 
-type Mode = 'select' | 'camera' | 'analyzing' | 'results' | 'manual';
+type Mode = 'select' | 'camera' | 'analyzing' | 'results' | 'manual' | 'text';
 
 export default function AddFood() {
   const router = useRouter();
@@ -113,6 +114,21 @@ export default function AddFood() {
     router.push('/');
   };
 
+  const handleTextSubmit = (foods: { name: string; mealType: MealType; nutrition: NutritionInfo }[]) => {
+    foods.forEach(food => {
+      add({
+        name: food.name,
+        mealType: food.mealType,
+        calories: food.nutrition.calories,
+        protein: food.nutrition.protein,
+        carbs: food.nutrition.carbs,
+        fat: food.nutrition.fat,
+        isManualEntry: false,
+      });
+    });
+    router.push('/');
+  };
+
   const handleRetry = () => {
     setImageData(null);
     setAnalysis(null);
@@ -149,6 +165,23 @@ export default function AddFood() {
             <p className="text-text-secondary text-center mb-6">
               How would you like to log your food?
             </p>
+
+            <button
+              onClick={() => setMode('text')}
+              className="w-full p-6 bg-white rounded-apple-lg shadow-apple hover:shadow-apple-lg transition-shadow"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-accent-purple/10 rounded-full flex items-center justify-center">
+                  <span className="text-3xl">💬</span>
+                </div>
+                <div className="text-left">
+                  <h3 className="font-semibold text-text-primary text-lg">Describe Your Meal</h3>
+                  <p className="text-text-secondary text-sm">
+                    Tell AI what you ate in your own words
+                  </p>
+                </div>
+              </div>
+            </button>
 
             <button
               onClick={() => setMode('camera')}
@@ -256,6 +289,15 @@ export default function AddFood() {
         {/* Mode: Manual */}
         {mode === 'manual' && (
           <ManualEntry onSubmit={handleManualSubmit} onCancel={handleCancel} />
+        )}
+
+        {/* Mode: Text */}
+        {mode === 'text' && profile?.apiKey && (
+          <TextEntry
+            apiKey={profile.apiKey}
+            onSubmit={handleTextSubmit}
+            onCancel={handleCancel}
+          />
         )}
       </div>
 

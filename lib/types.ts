@@ -12,10 +12,10 @@ export interface UserProfile {
   weightKg: number;
   activityLevel: ActivityLevel;
   goalType: GoalType;
-  goalValue: number; // negative calories for deficit_fixed, kg/week for weight_loss_rate
+  goalValue: number | null; // negative calories for deficit_fixed, kg/week for weight_loss_rate
   dailyWaterGoalMl: number;
   createdAt: string;
-  apiKey?: string; // OpenAI API key (stored locally)
+  openaiApiKey?: string; // OpenAI API key (stored in database)
 }
 
 export interface FoodEntry {
@@ -23,7 +23,6 @@ export interface FoodEntry {
   name: string;
   mealType: MealType;
   date: string; // ISO date string (YYYY-MM-DD)
-  timestamp: string; // Full ISO timestamp
   calories: number;
   protein: number;
   carbs: number;
@@ -39,7 +38,6 @@ export interface FoodEntry {
 export interface WaterLog {
   id: string;
   date: string;
-  timestamp: string;
   amountMl: number;
 }
 

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { v4 as uuidv4 } from 'uuid';
+import { useSession } from 'next-auth/react';
 import { useProfile } from '@/hooks/useProfile';
 import { Gender, ActivityLevel, GoalType, ACTIVITY_LABELS, UserProfile } from '@/lib/types';
 import { calculateDailyCalorieGoal } from '@/lib/calories';
@@ -14,8 +14,10 @@ type Step = 'welcome' | 'profile' | 'activity' | 'goal' | 'apikey';
 
 export default function Onboarding() {
   const router = useRouter();
-  const { createProfile } = useProfile();
+  const { status } = useSession();
+  const { createProfile, isOnboarded, isLoading } = useProfile();
   const [step, setStep] = useState<Step>('welcome');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Form state
   const [name, setName] = useState('');
@@ -25,12 +27,30 @@ export default function Onboarding() {
   const [weightKg, setWeightKg] = useState('');
   const [activityLevel, setActivityLevel] = useState<ActivityLevel>('moderate');
   const [goalType, setGoalType] = useState<GoalType>('deficit_fixed');
-  const [goalValue, setGoalValue] = useState(-500);
-  const [apiKey, setApiKey] = useState('');
+  const [goalValue, setGoalValue] = useState<number | null>(-500);
+  const [openaiApiKey, setOpenaiApiKey] = useState('');
 
-  const handleComplete = () => {
-    const profile: UserProfile = {
-      id: uuidv4(),
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/login');
+    }
+  }, [status, router]);
+
+  useEffect(() => {
+    if (!isLoading && isOnboarded) {
+      router.push('/');
+    }
+  }, [isLoading, isOnboarded, router]);
+
+  const handleGoalTypeChange = (type: GoalType) => {
+    setGoalType(type);
+    setGoalValue(type === 'deficit_fixed' ? -500 : 0.5);
+  };
+
+  const handleComplete = async () => {
+    setIsSubmitting(true);
+
+    const profileData: Omit<UserProfile, 'id' | 'createdAt'> = {
       name,
       age: parseInt(age),
       gender,
@@ -40,16 +60,20 @@ export default function Onboarding() {
       goalType,
       goalValue,
       dailyWaterGoalMl: 2000,
-      createdAt: new Date().toISOString(),
-      apiKey: apiKey || undefined,
+      openaiApiKey: openaiApiKey || undefined,
     };
 
-    createProfile(profile);
-    router.push('/');
+    const result = await createProfile(profileData);
+
+    if (result) {
+      router.push('/');
+    } else {
+      setIsSubmitting(false);
+    }
   };
 
   const previewCalories = () => {
-    if (!age || !heightCm || !weightKg) return null;
+    if (!age || !heightCm || !weightKg || goalValue === null) return null;
     const tempProfile: UserProfile = {
       id: '',
       name: '',
@@ -65,6 +89,17 @@ export default function Onboarding() {
     };
     return calculateDailyCalorieGoal(tempProfile);
   };
+
+  if (status === 'loading' || isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-accent-blue border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-text-secondary">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-white px-4 py-12 page-transition">
@@ -202,7 +237,7 @@ export default function Onboarding() {
 
             <div className="space-y-3">
               <button
-                onClick={() => setGoalType('deficit_fixed')}
+                onClick={() => handleGoalTypeChange('deficit_fixed')}
                 className={`w-full text-left p-4 rounded-apple-lg border-2 transition-all ${
                   goalType === 'deficit_fixed'
                     ? 'border-accent-blue bg-blue-50'
@@ -214,7 +249,7 @@ export default function Onboarding() {
               </button>
 
               <button
-                onClick={() => setGoalType('weight_loss_rate')}
+                onClick={() => handleGoalTypeChange('weight_loss_rate')}
                 className={`w-full text-left p-4 rounded-apple-lg border-2 transition-all ${
                   goalType === 'weight_loss_rate'
                     ? 'border-accent-blue bg-blue-50'
@@ -316,18 +351,18 @@ export default function Onboarding() {
             <Input
               label="OpenAI API Key"
               type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
+              value={openaiApiKey}
+              onChange={(e) => setOpenaiApiKey(e.target.value)}
               placeholder="sk-..."
-              helperText="Your key is stored locally and never sent to our servers"
+              helperText="Your key is stored securely in the database"
             />
 
             <div className="flex gap-3">
               <Button variant="secondary" onClick={() => setStep('goal')}>
                 Back
               </Button>
-              <Button size="lg" fullWidth onClick={handleComplete}>
-                {apiKey ? 'Complete Setup' : 'Skip for Now'}
+              <Button size="lg" fullWidth onClick={handleComplete} disabled={isSubmitting}>
+                {isSubmitting ? 'Setting up...' : openaiApiKey ? 'Complete Setup' : 'Skip for Now'}
               </Button>
             </div>
 

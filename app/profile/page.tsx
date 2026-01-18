@@ -1,10 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession, signOut } from 'next-auth/react';
 import { useProfile } from '@/hooks/useProfile';
-import { ACTIVITY_LABELS, ActivityLevel, GoalType } from '@/lib/types';
-import { clearAllData } from '@/lib/storage';
 import BottomNav from '@/components/ui/BottomNav';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -13,23 +12,42 @@ import Modal from '@/components/ui/Modal';
 
 export default function Profile() {
   const router = useRouter();
-  const { profile, updateProfile, calorieGoal, macroTargets } = useProfile();
+  const { data: session, status } = useSession();
+  const { profile, updateProfile, calorieGoal, macroTargets, isLoading } = useProfile();
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
-  const [showResetModal, setShowResetModal] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState(profile?.apiKey || '');
+  const [showSignOutModal, setShowSignOutModal] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState('');
 
-  if (!profile) {
-    return null;
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/login');
+    }
+  }, [status, router]);
+
+  useEffect(() => {
+    if (profile?.openaiApiKey) {
+      setApiKeyInput(profile.openaiApiKey);
+    }
+  }, [profile]);
+
+  if (status === 'loading' || isLoading || !profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-accent-blue border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-text-secondary">Loading...</p>
+        </div>
+      </div>
+    );
   }
 
-  const handleSaveApiKey = () => {
-    updateProfile({ apiKey: apiKeyInput || undefined });
+  const handleSaveApiKey = async () => {
+    await updateProfile({ openaiApiKey: apiKeyInput || undefined });
     setShowApiKeyModal(false);
   };
 
-  const handleReset = () => {
-    clearAllData();
-    router.push('/onboarding');
+  const handleSignOut = async () => {
+    await signOut({ callbackUrl: '/login' });
   };
 
   return (
@@ -43,11 +61,16 @@ export default function Profile() {
         {/* User info */}
         <Card>
           <div className="flex items-center gap-4 mb-4">
-            <div className="w-16 h-16 bg-accent-blue/10 rounded-full flex items-center justify-center">
-              <span className="text-3xl">👤</span>
+            <div className="w-16 h-16 bg-accent-blue/10 rounded-full flex items-center justify-center overflow-hidden">
+              {session?.user?.image ? (
+                <img src={session.user.image} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-3xl">👤</span>
+              )}
             </div>
             <div>
               <h2 className="text-xl font-semibold text-text-primary">{profile.name}</h2>
+              <p className="text-sm text-text-secondary">{session?.user?.email}</p>
               <p className="text-text-secondary">
                 {profile.age} years • {profile.heightCm}cm • {profile.weightKg}kg
               </p>
@@ -105,11 +128,11 @@ export default function Profile() {
             <div>
               <h3 className="font-semibold text-text-primary">OpenAI API Key</h3>
               <p className="text-sm text-text-secondary">
-                {profile.apiKey ? 'Configured ✓' : 'Not configured'}
+                {profile.openaiApiKey ? 'Configured' : 'Not configured'}
               </p>
             </div>
             <Button variant="secondary" size="sm" onClick={() => setShowApiKeyModal(true)}>
-              {profile.apiKey ? 'Update' : 'Add'}
+              {profile.openaiApiKey ? 'Update' : 'Add'}
             </Button>
           </div>
         </Card>
@@ -149,14 +172,11 @@ export default function Profile() {
           </div>
         </Card>
 
-        {/* Danger zone */}
-        <Card className="border border-accent-red/30">
-          <h3 className="font-semibold text-accent-red mb-2">Danger Zone</h3>
-          <p className="text-sm text-text-secondary mb-3">
-            This will delete all your data and restart the app.
-          </p>
-          <Button variant="danger" onClick={() => setShowResetModal(true)}>
-            Reset All Data
+        {/* Account */}
+        <Card>
+          <h3 className="font-semibold text-text-primary mb-3">Account</h3>
+          <Button variant="secondary" fullWidth onClick={() => setShowSignOutModal(true)}>
+            Sign Out
           </Button>
         </Card>
 
@@ -175,7 +195,7 @@ export default function Profile() {
       >
         <div className="space-y-4">
           <p className="text-sm text-text-secondary">
-            Your API key is stored locally and used to analyze food photos.
+            Your API key is stored securely in the database and used to analyze food photos.
           </p>
           <Input
             type="password"
@@ -194,22 +214,22 @@ export default function Profile() {
         </div>
       </Modal>
 
-      {/* Reset Confirmation Modal */}
+      {/* Sign Out Modal */}
       <Modal
-        isOpen={showResetModal}
-        onClose={() => setShowResetModal(false)}
-        title="Reset All Data?"
+        isOpen={showSignOutModal}
+        onClose={() => setShowSignOutModal(false)}
+        title="Sign Out?"
       >
         <div className="space-y-4">
           <p className="text-text-secondary">
-            This will permanently delete all your food entries, water logs, weight history, and profile settings. This action cannot be undone.
+            Are you sure you want to sign out? Your data will be saved and available when you sign back in.
           </p>
           <div className="flex gap-3">
-            <Button variant="secondary" onClick={() => setShowResetModal(false)}>
+            <Button variant="secondary" onClick={() => setShowSignOutModal(false)}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={handleReset} fullWidth>
-              Yes, Reset Everything
+            <Button variant="danger" onClick={handleSignOut} fullWidth>
+              Sign Out
             </Button>
           </div>
         </div>
