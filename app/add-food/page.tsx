@@ -28,7 +28,7 @@ export default function AddFood() {
   const [selectedMealType, setSelectedMealType] = useState<MealType>('snack');
 
   const analyzeImage = async (image: string, prevAnalysis?: AIFoodAnalysis, currentAnswers?: Record<string, string>) => {
-    if (!profile?.apiKey) {
+    if (!profile?.openaiApiKey) {
       setError('Please add your OpenAI API key in Settings to use AI analysis');
       setMode('select');
       return;
@@ -43,7 +43,7 @@ export default function AddFood() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           imageData: image,
-          apiKey: profile.apiKey,
+          apiKey: profile.openaiApiKey,
           previousAnalysis: prevAnalysis,
           answers: currentAnswers,
         }),
@@ -217,7 +217,7 @@ export default function AddFood() {
               </div>
             </button>
 
-            {!profile?.apiKey && (
+            {!profile?.openaiApiKey && (
               <Card className="bg-amber-50 border border-amber-200">
                 <div className="flex gap-3">
                   <span className="text-xl">⚠️</span>
@@ -292,9 +292,9 @@ export default function AddFood() {
         )}
 
         {/* Mode: Text */}
-        {mode === 'text' && profile?.apiKey && (
+        {mode === 'text' && profile?.openaiApiKey && (
           <TextEntry
-            apiKey={profile.apiKey}
+            apiKey={profile.openaiApiKey}
             onSubmit={handleTextSubmit}
             onCancel={handleCancel}
           />

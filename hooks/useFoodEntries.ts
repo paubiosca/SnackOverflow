@@ -35,7 +35,7 @@ export function useFoodEntries(date?: string) {
     loadEntries();
   }, [loadEntries]);
 
-  const add = useCallback(async (entry: Omit<FoodEntry, 'id'>) => {
+  const add = useCallback(async (entry: Omit<FoodEntry, 'id' | 'date'> & { date?: string }) => {
     try {
       const res = await fetch('/api/food', {
         method: 'POST',

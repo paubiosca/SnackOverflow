@@ -64,7 +64,7 @@ export function calculateDailyCalorieGoal(profile: UserProfile): number {
     profile.gender,
     profile.activityLevel
   );
-  const deficit = calculateDeficit(profile.goalType, profile.goalValue);
+  const deficit = calculateDeficit(profile.goalType, profile.goalValue ?? 0);
 
   // Ensure minimum of 1200 calories for safety
   return Math.max(1200, tdee + deficit);
