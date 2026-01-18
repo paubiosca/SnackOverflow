@@ -68,79 +68,55 @@ Guidelines:
   - Small soda: ~150 cal, Medium: ~210 cal, Large: ~310 cal
   - Chicken sandwich: ~400-500 cal depending on preparation`;
 
-    // Use GPT-5.2 Responses API
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    // Use GPT-4o for text analysis
+    console.log('[analyze-text] Calling OpenAI API...');
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5.2',
-        input: prompt,
-        reasoning: { effort: 'medium' },
-        text: { verbosity: 'low' },
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 1500,
+        temperature: 0.3,
       }),
     });
 
     if (!response.ok) {
-      // Fallback to GPT-4o if GPT-5.2 is not available
-      const fallbackResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: 1500,
-          temperature: 0.3,
-        }),
-      });
-
-      if (!fallbackResponse.ok) {
-        const error = await fallbackResponse.json();
-        return NextResponse.json(
-          { error: error.error?.message || 'Failed to analyze text' },
-          { status: fallbackResponse.status }
-        );
-      }
-
-      const fallbackData = await fallbackResponse.json();
-      const content = fallbackData.choices[0]?.message?.content;
-
-      if (!content) {
-        return NextResponse.json(
-          { error: 'No response from AI' },
-          { status: 500 }
-        );
-      }
-
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        return NextResponse.json(
-          { error: 'Could not parse AI response' },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json(JSON.parse(jsonMatch[0]));
+      const error = await response.json();
+      console.error('[analyze-text] OpenAI error:', error);
+      return NextResponse.json(
+        { error: error.error?.message || 'Failed to analyze text' },
+        { status: response.status }
+      );
     }
 
     const data = await response.json();
+    const content = data.choices[0]?.message?.content;
 
-    // Extract the output text from GPT-5.2 response
-    const outputText = data.output_text || data.output?.text || JSON.stringify(data);
+    console.log('[analyze-text] Got response, parsing...');
 
-    const jsonMatch = outputText.match(/\{[\s\S]*\}/);
+    if (!content) {
+      console.error('[analyze-text] No content in response');
+      return NextResponse.json(
+        { error: 'No response from AI' },
+        { status: 500 }
+      );
+    }
+
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
+      console.error('[analyze-text] Could not parse JSON from:', content.substring(0, 200));
       return NextResponse.json(
         { error: 'Could not parse AI response' },
         { status: 500 }
       );
     }
 
+    console.log('[analyze-text] Success');
     return NextResponse.json(JSON.parse(jsonMatch[0]));
   } catch (error) {
     console.error('Text analysis error:', error);

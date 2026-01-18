@@ -64,6 +64,8 @@ ${Object.entries(answers).map(([id, answer]) => `- Question ${id}: ${answer}`).j
 Please update your nutritional estimates based on these clarifications. Set needsClarification to false and remove clarifyingQuestions.`;
     }
 
+    console.log('[analyze-food] Calling OpenAI API with image...');
+
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -94,7 +96,7 @@ Please update your nutritional estimates based on these clarifications. Set need
 
     if (!response.ok) {
       const error = await response.json();
-      console.error('OpenAI API error:', error);
+      console.error('[analyze-food] OpenAI API error:', error);
       return NextResponse.json(
         { error: error.error?.message || 'Failed to analyze image' },
         { status: response.status }
@@ -121,6 +123,7 @@ Please update your nutritional estimates based on these clarifications. Set need
     }
 
     const analysis = JSON.parse(jsonMatch[0]);
+    console.log('[analyze-food] Success:', analysis.foodName);
 
     return NextResponse.json(analysis);
   } catch (error) {
