@@ -9,7 +9,8 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
-import { User, Flame } from 'lucide-react';
+import { User, Flame, BarChart3, ChevronRight, Activity, Watch, RefreshCw } from 'lucide-react';
+import { ActivityApproach, ActivityLevel, ACTIVITY_LABELS, ACTIVITY_APPROACH_LABELS } from '@/lib/types';
 
 export default function Profile() {
   const router = useRouter();
@@ -17,6 +18,8 @@ export default function Profile() {
   const { profile, updateProfile, calorieGoal, macroTargets, isLoading } = useProfile();
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [showSignOutModal, setShowSignOutModal] = useState(false);
+  const [showActivityApproachModal, setShowActivityApproachModal] = useState(false);
+  const [showRedoOnboardingModal, setShowRedoOnboardingModal] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
 
   useEffect(() => {
@@ -49,6 +52,32 @@ export default function Profile() {
 
   const handleSignOut = async () => {
     await signOut({ callbackUrl: '/login' });
+  };
+
+  const handleRedoOnboarding = async () => {
+    try {
+      // Delete the profile to reset onboarding status
+      await fetch('/api/profile', { method: 'DELETE' });
+      // Redirect to onboarding
+      router.push('/onboarding');
+    } catch (error) {
+      console.error('Error resetting profile:', error);
+    }
+  };
+
+  const handleActivityApproachChange = async (approach: ActivityApproach) => {
+    if (approach === 'dynamic') {
+      // When switching to dynamic, set activity level to sedentary (base calculation)
+      await updateProfile({ activityApproach: approach, activityLevel: 'sedentary' });
+    } else {
+      // When switching to static, keep current activity level or default to moderate
+      await updateProfile({ activityApproach: approach });
+    }
+    setShowActivityApproachModal(false);
+  };
+
+  const handleActivityLevelChange = async (level: ActivityLevel) => {
+    await updateProfile({ activityLevel: level });
   };
 
   return (
@@ -121,6 +150,96 @@ export default function Profile() {
               <span className="font-medium text-text-primary">{profile.dailyWaterGoalMl}ml</span>
             </div>
           </div>
+        </Card>
+
+        {/* Progress Insights */}
+        <Card>
+          <button
+            onClick={() => router.push('/insights')}
+            className="w-full flex items-center justify-between"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-accent-purple/10 rounded-full flex items-center justify-center">
+                <BarChart3 className="w-5 h-5 text-accent-purple" />
+              </div>
+              <div className="text-left">
+                <h3 className="font-semibold text-text-primary">Progress Insights</h3>
+                <p className="text-sm text-text-secondary">
+                  View trends, streaks & patterns
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 text-text-secondary" />
+          </button>
+        </Card>
+
+        {/* Activity Approach */}
+        <Card>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                profile.activityApproach === 'dynamic'
+                  ? 'bg-accent-orange/10'
+                  : 'bg-accent-blue/10'
+              }`}>
+                {profile.activityApproach === 'dynamic' ? (
+                  <Watch className="w-5 h-5 text-accent-orange" />
+                ) : (
+                  <Activity className="w-5 h-5 text-accent-blue" />
+                )}
+              </div>
+              <div>
+                <h3 className="font-semibold text-text-primary">Activity Approach</h3>
+                <p className="text-sm text-text-secondary">
+                  {ACTIVITY_APPROACH_LABELS[profile.activityApproach || 'static'].name}
+                </p>
+              </div>
+            </div>
+            <Button variant="secondary" size="sm" onClick={() => setShowActivityApproachModal(true)}>
+              Change
+            </Button>
+          </div>
+
+          <div className={`p-3 rounded-apple ${
+            profile.activityApproach === 'dynamic'
+              ? 'bg-accent-orange/5 border border-accent-orange/20'
+              : 'bg-accent-blue/5 border border-accent-blue/20'
+          }`}>
+            <p className="text-sm text-text-secondary">
+              {profile.activityApproach === 'dynamic' ? (
+                <>
+                  <span className="font-medium text-text-primary">Dynamic mode:</span> Your base goal is calculated at sedentary level. Active calories from your Apple Watch add to your daily eating budget.
+                </>
+              ) : (
+                <>
+                  <span className="font-medium text-text-primary">Static mode:</span> Your activity level ({profile.activityLevel?.replace('_', ' ')}) is factored into a fixed daily goal.
+                </>
+              )}
+            </p>
+          </div>
+
+          {profile.activityApproach === 'static' && (
+            <div className="mt-4">
+              <label className="block text-sm text-text-secondary mb-2">Activity Level</label>
+              <div className="space-y-2">
+                {(Object.entries(ACTIVITY_LABELS) as [ActivityLevel, string][]).map(([level, label]) => (
+                  <button
+                    key={level}
+                    onClick={() => handleActivityLevelChange(level)}
+                    className={`w-full text-left p-3 rounded-apple border-2 transition-all text-sm ${
+                      profile.activityLevel === level
+                        ? 'border-accent-blue bg-blue-50'
+                        : 'border-border-light hover:border-gray-300'
+                    }`}
+                  >
+                    <span className={profile.activityLevel === level ? 'text-accent-blue font-medium' : 'text-text-primary'}>
+                      {label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </Card>
 
         {/* API Key */}
@@ -201,9 +320,20 @@ export default function Profile() {
         {/* Account */}
         <Card>
           <h3 className="font-semibold text-text-primary mb-3">Account</h3>
-          <Button variant="secondary" fullWidth onClick={() => setShowSignOutModal(true)}>
-            Sign Out
-          </Button>
+          <div className="space-y-3">
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={() => setShowRedoOnboardingModal(true)}
+              className="flex items-center justify-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Redo Onboarding
+            </Button>
+            <Button variant="danger" fullWidth onClick={() => setShowSignOutModal(true)}>
+              Sign Out
+            </Button>
+          </div>
         </Card>
 
         {/* App info */}
@@ -258,6 +388,92 @@ export default function Profile() {
               Sign Out
             </Button>
           </div>
+        </div>
+      </Modal>
+
+      {/* Redo Onboarding Modal */}
+      <Modal
+        isOpen={showRedoOnboardingModal}
+        onClose={() => setShowRedoOnboardingModal(false)}
+        title="Redo Onboarding?"
+      >
+        <div className="space-y-4">
+          <p className="text-text-secondary">
+            This will reset your profile and take you through the Quick Setup again. Your food logs and history will be kept.
+          </p>
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={() => setShowRedoOnboardingModal(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleRedoOnboarding} fullWidth>
+              Start Over
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Activity Approach Modal */}
+      <Modal
+        isOpen={showActivityApproachModal}
+        onClose={() => setShowActivityApproachModal(false)}
+        title="Change Activity Approach"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-text-secondary">
+            Choose how you want to track your daily activity:
+          </p>
+
+          <button
+            onClick={() => handleActivityApproachChange('static')}
+            className={`w-full text-left p-4 rounded-apple-lg border-2 transition-all ${
+              profile.activityApproach === 'static'
+                ? 'border-accent-blue bg-blue-50'
+                : 'border-border-light hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <Activity className="w-5 h-5 text-accent-blue mt-0.5" />
+              <div>
+                <div className="font-semibold text-text-primary">
+                  {ACTIVITY_APPROACH_LABELS.static.name}
+                </div>
+                <div className="text-sm text-text-secondary mt-1">
+                  {ACTIVITY_APPROACH_LABELS.static.description}
+                </div>
+                <div className="text-xs text-accent-blue mt-2">
+                  Best for: Consistent routine, same goal every day
+                </div>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => handleActivityApproachChange('dynamic')}
+            className={`w-full text-left p-4 rounded-apple-lg border-2 transition-all ${
+              profile.activityApproach === 'dynamic'
+                ? 'border-accent-orange bg-orange-50'
+                : 'border-border-light hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <Watch className="w-5 h-5 text-accent-orange mt-0.5" />
+              <div>
+                <div className="font-semibold text-text-primary">
+                  {ACTIVITY_APPROACH_LABELS.dynamic.name}
+                </div>
+                <div className="text-sm text-text-secondary mt-1">
+                  {ACTIVITY_APPROACH_LABELS.dynamic.description}
+                </div>
+                <div className="text-xs text-accent-orange mt-2">
+                  Best for: Variable exercise, Apple Watch users
+                </div>
+              </div>
+            </div>
+          </button>
+
+          <Button variant="secondary" fullWidth onClick={() => setShowActivityApproachModal(false)}>
+            Cancel
+          </Button>
         </div>
       </Modal>
 

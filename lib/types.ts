@@ -2,6 +2,7 @@ export type Gender = 'male' | 'female';
 export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
 export type GoalType = 'deficit_fixed' | 'weight_loss_rate';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+export type ActivityApproach = 'static' | 'dynamic';
 
 export interface UserProfile {
   id: string;
@@ -11,6 +12,7 @@ export interface UserProfile {
   heightCm: number;
   weightKg: number;
   activityLevel: ActivityLevel;
+  activityApproach: ActivityApproach; // 'static' = fixed multiplier, 'dynamic' = sedentary base + active calories
   goalType: GoalType;
   goalValue: number | null; // negative calories for deficit_fixed, kg/week for weight_loss_rate
   dailyWaterGoalMl: number;
@@ -34,6 +36,7 @@ export interface FoodEntry {
   aiConfidence?: number;
   photoUrl?: string; // base64 data URL
   notes?: string;
+  createdAt?: string; // ISO timestamp for grouping
 }
 
 export interface WaterLog {
@@ -109,4 +112,117 @@ export const MEAL_ICONS: Record<MealType, string> = {
   lunch: '☀️',
   dinner: '🌙',
   snack: '🍿',
+};
+
+// Recipe & Ingredient Types
+export type IngredientCategory = 'protein' | 'vegetable' | 'fruit' | 'grain' | 'dairy' | 'fat' | 'seasoning' | 'other';
+
+export interface Ingredient {
+  id: string;
+  name: string;
+  amount: string;
+  category: IngredientCategory;
+}
+
+export interface RecipeNutrition {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  servings: number;
+}
+
+export interface Recipe {
+  id: string;
+  name: string;
+  description: string;
+  prepTime: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  ingredientsUsed: string[];
+  instructions: string[];
+  nutrition: RecipeNutrition;
+  tags?: string[];
+}
+
+export interface MacroBudget {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
+export const INGREDIENT_CATEGORY_LABELS: Record<IngredientCategory, string> = {
+  protein: 'Protein',
+  vegetable: 'Vegetables',
+  fruit: 'Fruit',
+  grain: 'Grains',
+  dairy: 'Dairy',
+  fat: 'Fats & Oils',
+  seasoning: 'Seasonings',
+  other: 'Other',
+};
+
+// Onboarding Chat Types
+export type OnboardingTopic =
+  | 'greeting'
+  | 'name'
+  | 'demographics'
+  | 'body_metrics'
+  | 'activity_approach'
+  | 'activity_level'
+  | 'active_calorie_goal'
+  | 'goal_setting'
+  | 'summary'
+  | 'complete';
+
+export interface QuickReply {
+  label: string;
+  value: string;
+  description?: string;
+}
+
+export interface OnboardingMessage {
+  id: string;
+  role: 'assistant' | 'user';
+  content: string;
+  quickReplies?: QuickReply[];
+  timestamp: Date;
+}
+
+export interface ExtractedProfileData {
+  name?: string;
+  age?: number;
+  gender?: Gender;
+  heightCm?: number;
+  weightKg?: number;
+  activityApproach?: ActivityApproach;
+  activityLevel?: ActivityLevel;
+  activeCalorieGoal?: number;
+  goalType?: GoalType;
+  goalValue?: number;
+}
+
+export interface OnboardingCalculations {
+  bmr?: number;
+  tdee?: number;
+  recommendedCalories?: number;
+  baseSedentaryCalories?: number;
+}
+
+export interface OnboardingProgress {
+  currentTopic: OnboardingTopic;
+  extractedData: ExtractedProfileData;
+  calculations: OnboardingCalculations;
+  isComplete: boolean;
+}
+
+export const ACTIVITY_APPROACH_LABELS: Record<ActivityApproach, { name: string; description: string }> = {
+  static: {
+    name: 'Static',
+    description: 'Fixed daily goal based on your typical activity level',
+  },
+  dynamic: {
+    name: 'Dynamic',
+    description: 'Sedentary base + add active calories from exercise daily',
+  },
 };

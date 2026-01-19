@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { UserProfile } from '@/lib/types';
-import { calculateDailyCalorieGoal, calculateMacroTargets } from '@/lib/calories';
+import { calculateBaseCalorieGoal, calculateMacroTargets, getCalorieBreakdown } from '@/lib/calories';
 
 export function useProfile() {
   const { data: session, status } = useSession();
@@ -76,8 +76,10 @@ export function useProfile() {
     return null;
   }, []);
 
-  const calorieGoal = profile ? calculateDailyCalorieGoal(profile) : 2000;
+  // Calculate base calorie goal (respects activity approach)
+  const calorieGoal = profile ? calculateBaseCalorieGoal(profile) : 2000;
   const macroTargets = calculateMacroTargets(calorieGoal);
+  const calorieBreakdown = profile ? getCalorieBreakdown(profile) : null;
 
   return {
     profile,
@@ -88,5 +90,6 @@ export function useProfile() {
     createProfile,
     calorieGoal,
     macroTargets,
+    calorieBreakdown,
   };
 }

@@ -12,11 +12,11 @@ const MEAL_ICONS: Record<MealType, ReactNode> = {
   snack: <Cookie className="w-4 h-4" />,
 };
 
-const MEAL_COLORS: Record<MealType, string> = {
-  breakfast: '#f59e0b', // amber
-  lunch: '#eab308',     // yellow
-  dinner: '#6366f1',    // indigo
-  snack: '#f97316',     // orange
+const MEAL_COLORS: Record<MealType, { main: string; bg: string }> = {
+  breakfast: { main: '#f59e0b', bg: '#fef3c7' },
+  lunch: { main: '#eab308', bg: '#fef9c3' },
+  dinner: { main: '#6366f1', bg: '#e0e7ff' },
+  snack: { main: '#f97316', bg: '#ffedd5' },
 };
 
 interface MealBreakdownProps {
@@ -38,7 +38,7 @@ export default function MealBreakdown({ entries }: MealBreakdownProps) {
         label: MEAL_LABELS[type],
         calories,
         percentage,
-        color: MEAL_COLORS[type],
+        colors: MEAL_COLORS[type],
         icon: MEAL_ICONS[type],
       };
     });
@@ -54,11 +54,13 @@ export default function MealBreakdown({ entries }: MealBreakdownProps) {
   const maxMeal = [...mealData].sort((a, b) => b.calories - a.calories)[0];
 
   return (
-    <div className="mt-4 pt-4 border-t border-border-light">
-      <div className="text-xs text-text-secondary mb-3 text-center">Calories by Meal</div>
+    <div className="mt-5 pt-4 border-t border-border-light">
+      <div className="text-xs text-text-secondary mb-3 text-center font-medium">
+        Calories by Meal
+      </div>
 
       {/* Stacked bar */}
-      <div className="h-3 rounded-full overflow-hidden flex bg-gray-100">
+      <div className="h-4 rounded-full overflow-hidden flex bg-gray-100">
         {mealData.map((meal) =>
           meal.percentage > 0 ? (
             <div
@@ -66,35 +68,40 @@ export default function MealBreakdown({ entries }: MealBreakdownProps) {
               className="h-full transition-all"
               style={{
                 width: `${meal.percentage}%`,
-                backgroundColor: meal.color,
+                backgroundColor: meal.colors.main,
               }}
             />
           ) : null
         )}
       </div>
 
-      {/* Legend with percentages */}
-      <div className="grid grid-cols-2 gap-2 mt-3">
+      {/* Legend - 2x2 grid on mobile */}
+      <div className="grid grid-cols-2 gap-2 mt-4">
         {mealData.map((meal) => (
           <div
             key={meal.type}
-            className={`flex items-center gap-2 p-2 rounded-apple ${
-              meal.type === maxMeal.type && meal.calories > 0 ? 'bg-secondary-bg' : ''
-            }`}
+            className="flex items-center gap-2 p-2.5 rounded-xl transition-colors"
+            style={{
+              backgroundColor: meal.type === maxMeal.type && meal.calories > 0
+                ? meal.colors.bg
+                : 'transparent',
+            }}
           >
             <div
-              className="w-3 h-3 rounded-full flex-shrink-0"
-              style={{ backgroundColor: meal.color }}
-            />
-            <div className="flex items-center gap-1" style={{ color: meal.color }}>
+              className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+              style={{
+                backgroundColor: meal.colors.bg,
+                color: meal.colors.main,
+              }}
+            >
               {meal.icon}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-xs text-text-secondary truncate">{meal.label}</div>
-            </div>
-            <div className="text-right">
-              <span className="text-sm font-semibold text-text-primary">{meal.calories}</span>
-              <span className="text-xs text-text-secondary ml-1">({meal.percentage}%)</span>
+              <div className="text-xs text-text-secondary">{meal.label}</div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-sm font-bold text-text-primary">{meal.calories}</span>
+                <span className="text-xs text-text-secondary">({meal.percentage}%)</span>
+              </div>
             </div>
           </div>
         ))}
@@ -102,7 +109,13 @@ export default function MealBreakdown({ entries }: MealBreakdownProps) {
 
       {/* Insight */}
       {maxMeal.percentage > 40 && maxMeal.calories > 0 && (
-        <div className="mt-3 text-xs text-text-secondary text-center">
+        <div
+          className="mt-3 text-xs text-center py-2 px-3 rounded-lg"
+          style={{
+            backgroundColor: maxMeal.colors.bg,
+            color: maxMeal.colors.main,
+          }}
+        >
           {maxMeal.label} accounts for {maxMeal.percentage}% of today&apos;s calories
         </div>
       )}

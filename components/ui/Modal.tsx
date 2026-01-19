@@ -28,17 +28,20 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
         onClick={onClose}
       />
 
       {/* Modal */}
-      <div className="relative w-full sm:max-w-lg bg-white rounded-t-apple-xl sm:rounded-apple-xl shadow-apple-lg max-h-[90vh] overflow-hidden animate-slide-up">
+      <div
+        className="relative w-full sm:max-w-lg bg-white rounded-t-apple-xl sm:rounded-apple-xl shadow-apple-lg max-h-[85vh] overflow-hidden slide-up mb-0 sm:mb-0"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Handle bar (mobile) */}
-        <div className="sm:hidden flex justify-center pt-3">
+        <div className="sm:hidden flex justify-center pt-3 pb-1">
           <div className="w-10 h-1 bg-gray-300 rounded-full" />
         </div>
 
@@ -50,26 +53,10 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
         )}
 
         {/* Content */}
-        <div className="px-6 py-4 overflow-y-auto max-h-[70vh]">
+        <div className="px-6 py-4 safe-bottom overflow-y-auto max-h-[70vh] scroll-container">
           {children}
         </div>
       </div>
-
-      <style jsx>{`
-        @keyframes slide-up {
-          from {
-            transform: translateY(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateY(0);
-            opacity: 1;
-          }
-        }
-        .animate-slide-up {
-          animation: slide-up 0.3s ease-out;
-        }
-      `}</style>
     </div>
   );
 }

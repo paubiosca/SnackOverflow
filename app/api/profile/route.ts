@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { getProfile, createProfile, updateProfile } from '@/lib/db';
+import { getProfile, createProfile, updateProfile, deleteProfile } from '@/lib/db';
 
 export async function GET() {
   const session = await auth();
@@ -61,6 +61,25 @@ export async function PUT(request: NextRequest) {
     console.error('Error updating profile:', error);
     return NextResponse.json(
       { error: 'Failed to update profile' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE() {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    await deleteProfile(session.user.id);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting profile:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete profile' },
       { status: 500 }
     );
   }

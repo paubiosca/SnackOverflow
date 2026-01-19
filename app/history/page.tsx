@@ -39,7 +39,10 @@ export default function History() {
 
   // Fetch entries for the visible month
   const fetchEntriesForMonth = useCallback(async () => {
-    if (!session?.user) return;
+    if (!session?.user) {
+      console.log('Calendar: No session, skipping fetch');
+      return;
+    }
 
     setIsLoadingEntries(true);
     try {
@@ -47,14 +50,18 @@ export default function History() {
       const res = await fetch('/api/food');
       if (res.ok) {
         const { entries } = await res.json();
-        // Group by date
+        // Group by date (normalize date format to YYYY-MM-DD)
         const grouped: Record<string, FoodEntry[]> = {};
+        console.log('Calendar: Raw entries from API:', entries?.length || 0, 'entries');
         (entries || []).forEach((entry: FoodEntry) => {
-          if (!grouped[entry.date]) {
-            grouped[entry.date] = [];
+          // Normalize date to YYYY-MM-DD format (handles both "2025-01-19" and "2025-01-19T00:00:00.000Z")
+          const dateKey = entry.date.includes('T') ? entry.date.split('T')[0] : entry.date;
+          if (!grouped[dateKey]) {
+            grouped[dateKey] = [];
           }
-          grouped[entry.date].push(entry);
+          grouped[dateKey].push(entry);
         });
+        console.log('Calendar: Grouped entries by dates:', Object.keys(grouped));
         setEntriesCache(grouped);
       }
     } catch (error) {

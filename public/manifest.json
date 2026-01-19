@@ -1,0 +1,22 @@
+{
+  "name": "SnackOverflow",
+  "short_name": "SnackOverflow",
+  "description": "AI-powered calorie tracking made simple",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#007aff",
+  "orientation": "portrait",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["health", "fitness", "lifestyle"],
+  "screenshots": [],
+  "prefer_related_applications": false
+}

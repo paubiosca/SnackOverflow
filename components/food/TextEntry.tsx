@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { MealType, NutritionInfo, MEAL_LABELS } from '@/lib/types';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
-import { HelpCircle, Store, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { HelpCircle, ChevronDown, ChevronUp, RefreshCw, Camera, X, Image } from 'lucide-react';
 
 interface ParsedFood {
   name: string;
@@ -25,48 +25,93 @@ interface TextEntryProps {
   apiKey: string;
   onSubmit: (foods: { name: string; mealType: MealType; nutrition: NutritionInfo }[]) => void;
   onCancel: () => void;
+  defaultMealType?: MealType;
 }
 
-export default function TextEntry({ apiKey, onSubmit, onCancel }: TextEntryProps) {
+export default function TextEntry({ apiKey, onSubmit, onCancel, defaultMealType = 'snack' }: TextEntryProps) {
   const [description, setDescription] = useState('');
+  const [imageData, setImageData] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [parsedFoods, setParsedFoods] = useState<ParsedFood[]>([]);
   const [questions, setQuestions] = useState<ClarifyingQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [mealType, setMealType] = useState<MealType>('snack');
+  const [mealType, setMealType] = useState<MealType>(defaultMealType);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<'input' | 'questions' | 'review'>('input');
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [reAnalyzingIndex, setReAnalyzingIndex] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImageData(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeImage = () => {
+    setImageData(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const analyzeText = async (text: string, previousAnswers?: Record<string, string>) => {
     setIsAnalyzing(true);
     setError(null);
 
     try {
-      const response = await fetch('/api/analyze-text', {
+      // Choose endpoint based on whether we have an image
+      const endpoint = imageData ? '/api/analyze-food' : '/api/analyze-text';
+      const body = imageData
+        ? {
+            imageData,
+            apiKey,
+            additionalContext: text,
+            answers: previousAnswers,
+          }
+        : {
+            description: text,
+            apiKey,
+            answers: previousAnswers,
+          };
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          description: text,
-          apiKey,
-          answers: previousAnswers,
-        }),
+        body: JSON.stringify(body),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to analyze text');
+        throw new Error(data.error || 'Failed to analyze');
       }
 
-      setParsedFoods(data.foods || []);
-
-      if (data.clarifyingQuestions && data.clarifyingQuestions.length > 0) {
-        setQuestions(data.clarifyingQuestions);
-        setStep('questions');
-      } else {
+      // Handle response from analyze-food (single food) vs analyze-text (multiple foods)
+      if (imageData && data.foodName) {
+        // analyze-food returns single food object
+        setParsedFoods([{
+          name: data.foodName,
+          nutrition: data.nutrition,
+          confidence: data.confidence,
+          portion: data.portionSize,
+        }]);
         setStep('review');
+      } else if (data.foods) {
+        // analyze-text returns array
+        setParsedFoods(data.foods || []);
+
+        if (data.clarifyingQuestions && data.clarifyingQuestions.length > 0) {
+          setQuestions(data.clarifyingQuestions);
+          setStep('questions');
+        } else {
+          setStep('review');
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to analyze');
@@ -77,7 +122,7 @@ export default function TextEntry({ apiKey, onSubmit, onCancel }: TextEntryProps
 
   const handleSubmitDescription = (e: React.FormEvent) => {
     e.preventDefault();
-    if (description.trim()) {
+    if (description.trim() || imageData) {
       analyzeText(description);
     }
   };
@@ -89,7 +134,6 @@ export default function TextEntry({ apiKey, onSubmit, onCancel }: TextEntryProps
     setReAnalyzingIndex(index);
 
     try {
-      // Build a specific prompt for this ingredient
       const ingredientDescription = `${food.name}${food.portion ? `, portion: ${food.portion}` : ''}${food.brand ? `, brand: ${food.brand}` : ''}`;
 
       const response = await fetch('/api/analyze-text', {
@@ -107,7 +151,6 @@ export default function TextEntry({ apiKey, onSubmit, onCancel }: TextEntryProps
         throw new Error(data.error || 'Failed to re-analyze');
       }
 
-      // If we got a result, update just this item
       if (data.foods && data.foods.length > 0) {
         const updatedFood = data.foods[0];
         const newParsedFoods = [...parsedFoods];
@@ -131,10 +174,8 @@ export default function TextEntry({ apiKey, onSubmit, onCancel }: TextEntryProps
     const newAnswers = { ...answers, [questionId]: answer };
     setAnswers(newAnswers);
 
-    // Check if all questions answered
     const allAnswered = questions.every(q => newAnswers[q.id]);
     if (allAnswered) {
-      // Re-analyze with answers
       analyzeText(description, newAnswers);
     }
   };
@@ -150,10 +191,14 @@ export default function TextEntry({ apiKey, onSubmit, onCancel }: TextEntryProps
 
   const handleStartOver = () => {
     setDescription('');
+    setImageData(null);
     setParsedFoods([]);
     setQuestions([]);
     setAnswers({});
     setStep('input');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   return (
@@ -172,8 +217,55 @@ export default function TextEntry({ apiKey, onSubmit, onCancel }: TextEntryProps
               className="w-full px-4 py-3 bg-secondary-bg border border-border-light rounded-apple text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent-blue min-h-[120px] resize-none"
               disabled={isAnalyzing}
             />
+          </div>
+
+          {/* Optional Photo */}
+          <div>
+            <label className="block text-sm font-medium text-text-primary mb-2">
+              Add a photo <span className="text-text-secondary font-normal">(optional)</span>
+            </label>
+
+            {imageData ? (
+              <div className="relative rounded-apple overflow-hidden">
+                <img src={imageData} alt="Food" className="w-full h-48 object-cover" />
+                <button
+                  type="button"
+                  onClick={removeImage}
+                  className="absolute top-2 right-2 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center hover:bg-black/70 transition-colors"
+                >
+                  <X className="w-5 h-5 text-white" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleImageSelect}
+                  className="hidden"
+                  id="food-photo"
+                />
+                <label
+                  htmlFor="food-photo"
+                  className="flex-1 flex items-center justify-center gap-2 p-4 bg-secondary-bg border-2 border-dashed border-border-light rounded-apple cursor-pointer hover:border-accent-blue hover:bg-accent-blue/5 transition-all"
+                >
+                  <Camera className="w-5 h-5 text-text-secondary" />
+                  <span className="text-sm text-text-secondary">Take photo</span>
+                </label>
+                <label
+                  htmlFor="food-photo"
+                  className="flex-1 flex items-center justify-center gap-2 p-4 bg-secondary-bg border-2 border-dashed border-border-light rounded-apple cursor-pointer hover:border-accent-blue hover:bg-accent-blue/5 transition-all"
+                >
+                  <Image className="w-5 h-5 text-text-secondary" />
+                  <span className="text-sm text-text-secondary">Choose photo</span>
+                </label>
+              </div>
+            )}
+
             <p className="mt-2 text-xs text-text-secondary">
-              Be as specific as you can about portions, ingredients, and preparation methods.
+              A photo helps AI identify portions and ingredients more accurately.
             </p>
           </div>
 
@@ -190,7 +282,7 @@ export default function TextEntry({ apiKey, onSubmit, onCancel }: TextEntryProps
             <Button
               type="submit"
               fullWidth
-              disabled={!description.trim() || isAnalyzing}
+              disabled={(!description.trim() && !imageData) || isAnalyzing}
             >
               {isAnalyzing ? (
                 <span className="flex items-center gap-2">
@@ -260,6 +352,13 @@ export default function TextEntry({ apiKey, onSubmit, onCancel }: TextEntryProps
       {/* Step: Review */}
       {step === 'review' && parsedFoods.length > 0 && (
         <div className="space-y-4">
+          {/* Show image if provided */}
+          {imageData && (
+            <div className="rounded-apple overflow-hidden">
+              <img src={imageData} alt="Food" className="w-full h-32 object-cover" />
+            </div>
+          )}
+
           {/* Meal type selector */}
           <Card>
             <label className="block text-sm font-medium text-text-primary mb-2">
@@ -284,7 +383,7 @@ export default function TextEntry({ apiKey, onSubmit, onCancel }: TextEntryProps
 
           {/* Parsed foods - Clean summary */}
           <Card>
-            {/* Total at top - most important info */}
+            {/* Total at top */}
             <div className="flex justify-between items-center mb-4 pb-3 border-b border-border-light">
               <div>
                 <span className="text-sm text-text-secondary">{parsedFoods.length} items</span>
@@ -297,16 +396,12 @@ export default function TextEntry({ apiKey, onSubmit, onCancel }: TextEntryProps
               </div>
             </div>
 
-            {/* Simple list - tap to expand */}
+            {/* Simple list */}
             <div className="space-y-2">
               {parsedFoods.map((food, index) => {
                 const isExpanded = expandedIndex === index;
                 return (
-                  <div
-                    key={index}
-                    className="rounded-apple overflow-hidden"
-                  >
-                    {/* Collapsed view - just name and calories */}
+                  <div key={index} className="rounded-apple overflow-hidden">
                     <button
                       onClick={() => setExpandedIndex(isExpanded ? null : index)}
                       className="w-full p-3 bg-secondary-bg hover:bg-gray-100 transition-colors flex items-center justify-between"
@@ -329,11 +424,9 @@ export default function TextEntry({ apiKey, onSubmit, onCancel }: TextEntryProps
                       </div>
                     </button>
 
-                    {/* Expanded details */}
                     {isExpanded && (
                       <div className="px-3 pb-3 bg-secondary-bg border-t border-gray-200">
                         <div className="pt-2 space-y-2">
-                          {/* Portion */}
                           {food.portion && (
                             <div className="flex justify-between text-sm">
                               <span className="text-text-secondary">Portion</span>
@@ -342,7 +435,6 @@ export default function TextEntry({ apiKey, onSubmit, onCancel }: TextEntryProps
                               </span>
                             </div>
                           )}
-                          {/* Macros */}
                           <div className="flex justify-between text-sm">
                             <span className="text-text-secondary">Protein</span>
                             <span className="text-text-primary">{food.nutrition.protein}g</span>
@@ -356,7 +448,6 @@ export default function TextEntry({ apiKey, onSubmit, onCancel }: TextEntryProps
                             <span className="text-text-primary">{food.nutrition.fat}g</span>
                           </div>
 
-                          {/* Re-analyze button */}
                           <button
                             onClick={(e) => {
                               e.stopPropagation();

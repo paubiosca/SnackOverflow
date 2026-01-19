@@ -1,5 +1,5 @@
 import { sql } from '@vercel/postgres';
-import { FoodEntry, WaterLog, WeightLog, UserProfile, MealType } from '../types';
+import { FoodEntry, WaterLog, WeightLog, UserProfile, MealType, ActivityApproach } from '../types';
 
 // Profile operations
 export async function getProfile(userId: string): Promise<UserProfile | null> {
@@ -9,6 +9,7 @@ export async function getProfile(userId: string): Promise<UserProfile | null> {
       height_cm as "heightCm",
       weight_kg as "weightKg",
       activity_level as "activityLevel",
+      COALESCE(activity_approach, 'static') as "activityApproach",
       goal_type as "goalType",
       goal_value as "goalValue",
       daily_water_goal_ml as "dailyWaterGoalMl",
@@ -30,6 +31,7 @@ export async function getProfile(userId: string): Promise<UserProfile | null> {
     heightCm: Number(row.heightCm),
     weightKg: Number(row.weightKg),
     activityLevel: row.activityLevel,
+    activityApproach: row.activityApproach as ActivityApproach,
     goalType: row.goalType,
     goalValue: Number(row.goalValue),
     dailyWaterGoalMl: Number(row.dailyWaterGoalMl),
@@ -43,17 +45,19 @@ export async function createProfile(userId: string, profile: Omit<UserProfile, '
   const result = await sql`
     INSERT INTO profiles (
       user_id, name, age, gender, height_cm, weight_kg,
-      activity_level, goal_type, goal_value, daily_water_goal_ml, active_calorie_goal, openai_api_key
+      activity_level, activity_approach, goal_type, goal_value, daily_water_goal_ml, active_calorie_goal, openai_api_key
     ) VALUES (
       ${userId}, ${profile.name}, ${profile.age}, ${profile.gender},
       ${profile.heightCm}, ${profile.weightKg}, ${profile.activityLevel},
-      ${profile.goalType}, ${profile.goalValue}, ${profile.dailyWaterGoalMl},
+      ${profile.activityApproach || 'static'}, ${profile.goalType}, ${profile.goalValue}, ${profile.dailyWaterGoalMl},
       ${profile.activeCalorieGoal || 450}, ${profile.openaiApiKey || null}
     )
     RETURNING
       id, name, age, gender,
       height_cm as "heightCm", weight_kg as "weightKg",
-      activity_level as "activityLevel", goal_type as "goalType",
+      activity_level as "activityLevel",
+      COALESCE(activity_approach, 'static') as "activityApproach",
+      goal_type as "goalType",
       goal_value as "goalValue", daily_water_goal_ml as "dailyWaterGoalMl",
       COALESCE(active_calorie_goal, 450) as "activeCalorieGoal",
       openai_api_key as "openaiApiKey", created_at as "createdAt"
@@ -68,6 +72,7 @@ export async function createProfile(userId: string, profile: Omit<UserProfile, '
     heightCm: Number(row.heightCm),
     weightKg: Number(row.weightKg),
     activityLevel: row.activityLevel,
+    activityApproach: row.activityApproach as ActivityApproach,
     goalType: row.goalType,
     goalValue: Number(row.goalValue),
     dailyWaterGoalMl: Number(row.dailyWaterGoalMl),
@@ -86,6 +91,7 @@ export async function updateProfile(userId: string, updates: Partial<UserProfile
       height_cm = COALESCE(${updates.heightCm ?? null}, height_cm),
       weight_kg = COALESCE(${updates.weightKg ?? null}, weight_kg),
       activity_level = COALESCE(${updates.activityLevel ?? null}, activity_level),
+      activity_approach = COALESCE(${updates.activityApproach ?? null}, activity_approach),
       goal_type = COALESCE(${updates.goalType ?? null}, goal_type),
       goal_value = COALESCE(${updates.goalValue ?? null}, goal_value),
       daily_water_goal_ml = COALESCE(${updates.dailyWaterGoalMl ?? null}, daily_water_goal_ml),
@@ -96,7 +102,9 @@ export async function updateProfile(userId: string, updates: Partial<UserProfile
     RETURNING
       id, name, age, gender,
       height_cm as "heightCm", weight_kg as "weightKg",
-      activity_level as "activityLevel", goal_type as "goalType",
+      activity_level as "activityLevel",
+      COALESCE(activity_approach, 'static') as "activityApproach",
+      goal_type as "goalType",
       goal_value as "goalValue", daily_water_goal_ml as "dailyWaterGoalMl",
       COALESCE(active_calorie_goal, 450) as "activeCalorieGoal",
       openai_api_key as "openaiApiKey", created_at as "createdAt"
@@ -113,6 +121,7 @@ export async function updateProfile(userId: string, updates: Partial<UserProfile
     heightCm: Number(row.heightCm),
     weightKg: Number(row.weightKg),
     activityLevel: row.activityLevel,
+    activityApproach: row.activityApproach as ActivityApproach,
     goalType: row.goalType,
     goalValue: Number(row.goalValue),
     dailyWaterGoalMl: Number(row.dailyWaterGoalMl),
@@ -122,6 +131,13 @@ export async function updateProfile(userId: string, updates: Partial<UserProfile
   };
 }
 
+export async function deleteProfile(userId: string): Promise<boolean> {
+  const result = await sql`
+    DELETE FROM profiles WHERE user_id = ${userId}
+  `;
+  return (result.rowCount ?? 0) > 0;
+}
+
 // Food entry operations
 export async function getFoodEntries(userId: string, date?: string): Promise<FoodEntry[]> {
   const result = date
@@ -129,7 +145,7 @@ export async function getFoodEntries(userId: string, date?: string): Promise<Foo
         SELECT
           id, name, meal_type as "mealType", date, calories, protein, carbs, fat,
           is_manual_entry as "isManualEntry", ai_confidence as "aiConfidence",
-          photo_url as "photoUrl"
+          photo_url as "photoUrl", created_at as "createdAt"
         FROM food_entries
         WHERE user_id = ${userId} AND date = ${date}
         ORDER BY created_at DESC
@@ -138,7 +154,7 @@ export async function getFoodEntries(userId: string, date?: string): Promise<Foo
         SELECT
           id, name, meal_type as "mealType", date, calories, protein, carbs, fat,
           is_manual_entry as "isManualEntry", ai_confidence as "aiConfidence",
-          photo_url as "photoUrl"
+          photo_url as "photoUrl", created_at as "createdAt"
         FROM food_entries
         WHERE user_id = ${userId}
         ORDER BY date DESC, created_at DESC
@@ -156,6 +172,7 @@ export async function getFoodEntries(userId: string, date?: string): Promise<Foo
     isManualEntry: row.isManualEntry,
     aiConfidence: row.aiConfidence ? Number(row.aiConfidence) : undefined,
     photoUrl: row.photoUrl || undefined,
+    createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : undefined,
   }));
 }
 
@@ -319,4 +336,86 @@ export async function createUser(email: string, passwordHash: string | null, nam
     RETURNING id, email, name, image, created_at
   `;
   return result.rows[0];
+}
+
+// Insights queries - date range operations
+
+export async function getFoodEntriesInRange(userId: string, startDate: string, endDate: string): Promise<FoodEntry[]> {
+  const result = await sql`
+    SELECT
+      id, name, meal_type as "mealType", date, calories, protein, carbs, fat,
+      is_manual_entry as "isManualEntry", ai_confidence as "aiConfidence",
+      photo_url as "photoUrl", created_at as "createdAt"
+    FROM food_entries
+    WHERE user_id = ${userId} AND date >= ${startDate} AND date <= ${endDate}
+    ORDER BY date DESC, created_at DESC
+  `;
+
+  return result.rows.map(row => ({
+    id: row.id,
+    name: row.name,
+    mealType: row.mealType as MealType,
+    date: row.date,
+    calories: Number(row.calories),
+    protein: Number(row.protein),
+    carbs: Number(row.carbs),
+    fat: Number(row.fat),
+    isManualEntry: row.isManualEntry,
+    aiConfidence: row.aiConfidence ? Number(row.aiConfidence) : undefined,
+    photoUrl: row.photoUrl || undefined,
+    createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : undefined,
+  }));
+}
+
+export async function getWeightLogsInRange(userId: string, startDate: string, endDate: string): Promise<WeightLog[]> {
+  const result = await sql`
+    SELECT id, date, weight_kg as "weightKg"
+    FROM weight_logs
+    WHERE user_id = ${userId} AND date >= ${startDate} AND date <= ${endDate}
+    ORDER BY date ASC
+  `;
+
+  return result.rows.map(row => ({
+    id: row.id,
+    date: row.date,
+    weightKg: Number(row.weightKg),
+  }));
+}
+
+export async function getDailyCalorieSummaries(
+  userId: string,
+  startDate: string,
+  endDate: string
+): Promise<{ date: string; totalCalories: number; totalProtein: number; totalCarbs: number; totalFat: number }[]> {
+  const result = await sql`
+    SELECT
+      date,
+      COALESCE(SUM(calories), 0) as "totalCalories",
+      COALESCE(SUM(protein), 0) as "totalProtein",
+      COALESCE(SUM(carbs), 0) as "totalCarbs",
+      COALESCE(SUM(fat), 0) as "totalFat"
+    FROM food_entries
+    WHERE user_id = ${userId} AND date >= ${startDate} AND date <= ${endDate}
+    GROUP BY date
+    ORDER BY date ASC
+  `;
+
+  return result.rows.map(row => ({
+    date: row.date,
+    totalCalories: Number(row.totalCalories),
+    totalProtein: Number(row.totalProtein),
+    totalCarbs: Number(row.totalCarbs),
+    totalFat: Number(row.totalFat),
+  }));
+}
+
+export async function getDatesWithEntries(userId: string, startDate: string, endDate: string): Promise<string[]> {
+  const result = await sql`
+    SELECT DISTINCT date
+    FROM food_entries
+    WHERE user_id = ${userId} AND date >= ${startDate} AND date <= ${endDate}
+    ORDER BY date ASC
+  `;
+
+  return result.rows.map(row => row.date);
 }

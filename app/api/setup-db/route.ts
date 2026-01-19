@@ -63,6 +63,19 @@ export async function GET(request: Request) {
       END $$;
     `;
 
+    // Add activity_approach column if it doesn't exist (for existing installations)
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'profiles' AND column_name = 'activity_approach'
+        ) THEN
+          ALTER TABLE profiles ADD COLUMN activity_approach VARCHAR(20) NOT NULL DEFAULT 'static' CHECK (activity_approach IN ('static', 'dynamic'));
+        END IF;
+      END $$;
+    `;
+
     // Create food_entries table
     await sql`
       CREATE TABLE IF NOT EXISTS food_entries (

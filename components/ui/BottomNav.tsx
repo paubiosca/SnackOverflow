@@ -1,7 +1,6 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { BarChart3, Calendar, Plus, User } from 'lucide-react';
 import { ReactNode } from 'react';
 
@@ -21,43 +20,59 @@ const navItems: NavItem[] = [
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const router = useRouter();
 
-  // Don't show nav on onboarding
-  if (pathname?.startsWith('/onboarding')) {
+  // Don't show nav on onboarding or login/register
+  if (pathname?.startsWith('/onboarding') || pathname?.startsWith('/login') || pathname?.startsWith('/register')) {
     return null;
   }
 
+  const handleNavClick = (href: string) => {
+    router.push(href);
+  };
+
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-border-light safe-bottom z-50">
-      <div className="max-w-lg mx-auto flex items-center justify-around py-2">
+    <nav
+      className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-[60]"
+      style={{
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      }}
+    >
+      <div className="max-w-lg mx-auto flex items-center justify-around py-2 px-2">
         {navItems.map((item) => {
           const isActive = pathname === item.href;
 
           if (item.isMain) {
             return (
-              <Link
+              <button
                 key={item.href}
-                href={item.href}
-                className="flex flex-col items-center justify-center -mt-6"
+                type="button"
+                onClick={() => handleNavClick(item.href)}
+                className="flex flex-col items-center justify-center -mt-6 cursor-pointer"
+                style={{ WebkitTapHighlightColor: 'transparent' }}
               >
-                <div className="w-14 h-14 bg-accent-blue rounded-full flex items-center justify-center shadow-lg btn-press">
+                <div className="w-14 h-14 bg-accent-blue rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform">
                   {item.icon}
                 </div>
-              </Link>
+              </button>
             );
           }
 
           return (
-            <Link
+            <button
               key={item.href}
-              href={item.href}
-              className={`flex flex-col items-center justify-center py-1 px-4 rounded-lg transition-colors ${
-                isActive ? 'text-accent-blue' : 'text-text-secondary'
+              type="button"
+              onClick={() => handleNavClick(item.href)}
+              className={`flex flex-col items-center justify-center py-2 px-5 rounded-xl cursor-pointer ${
+                isActive ? 'text-accent-blue' : 'text-gray-500'
               }`}
+              style={{ WebkitTapHighlightColor: 'transparent' }}
             >
-              <span className="mb-0.5">{item.icon}</span>
-              <span className="text-xs font-medium">{item.label}</span>
-            </Link>
+              <span className={`mb-0.5 ${isActive ? 'scale-110' : ''}`}>
+                {item.icon}
+              </span>
+              <span className="text-[10px] font-medium">{item.label}</span>
+            </button>
           );
         })}
       </div>

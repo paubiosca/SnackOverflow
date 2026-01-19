@@ -9,11 +9,12 @@ import Card from '@/components/ui/Card';
 interface ManualEntryProps {
   onSubmit: (data: { name: string; mealType: MealType; nutrition: NutritionInfo }) => void;
   onCancel: () => void;
+  defaultMealType?: MealType;
 }
 
-export default function ManualEntry({ onSubmit, onCancel }: ManualEntryProps) {
+export default function ManualEntry({ onSubmit, onCancel, defaultMealType = 'snack' }: ManualEntryProps) {
   const [name, setName] = useState('');
-  const [mealType, setMealType] = useState<MealType>('snack');
+  const [mealType, setMealType] = useState<MealType>(defaultMealType);
   const [calories, setCalories] = useState('');
   const [protein, setProtein] = useState('');
   const [carbs, setCarbs] = useState('');

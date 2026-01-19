@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { getWeightLogs, addWeightLog } from '@/lib/storage';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { WeightLog } from '@/lib/types';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -42,19 +41,35 @@ export default function WeightTracker({ startingWeight }: WeightTrackerProps) {
   const [weightInput, setWeightInput] = useState('');
   const [expanded, setExpanded] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
   const today = getLocalDateString();
 
-  useEffect(() => {
-    const weightLogs = getWeightLogs();
-    setLogs(weightLogs);
+  // Fetch weight logs from API
+  const fetchLogs = useCallback(async () => {
+    try {
+      const res = await fetch('/api/weight');
+      if (res.ok) {
+        const { logs: weightLogs } = await res.json();
+        setLogs(weightLogs || []);
 
-    // Check if we have today's weight
-    const hasToday = weightLogs.some(log => log.date === today);
-    if (!hasToday) {
-      setShowPrompt(true);
+        // Check if we have today's weight
+        const hasToday = (weightLogs || []).some((log: WeightLog) => log.date === today);
+        if (!hasToday) {
+          setShowPrompt(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching weight logs:', error);
+    } finally {
+      setIsLoading(false);
     }
   }, [today]);
+
+  useEffect(() => {
+    fetchLogs();
+  }, [fetchLogs]);
 
   const todayLog = logs.find(log => log.date === today);
   const latestWeight = logs.length > 0
@@ -103,21 +118,32 @@ export default function WeightTracker({ startingWeight }: WeightTrackerProps) {
     };
   }, [logs]);
 
-  const handleLogWeight = () => {
+  const handleLogWeight = async () => {
     const weight = parseFloat(weightInput);
     if (isNaN(weight) || weight <= 0) return;
 
-    const newLog: WeightLog = {
-      id: Date.now().toString(),
-      date: today,
-      weightKg: weight,
-    };
+    setIsSaving(true);
+    try {
+      const res = await fetch('/api/weight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: today,
+          weightKg: weight,
+        }),
+      });
 
-    addWeightLog(newLog);
-    setLogs(getWeightLogs());
-    setShowModal(false);
-    setShowPrompt(false);
-    setWeightInput('');
+      if (res.ok) {
+        await fetchLogs();
+        setShowModal(false);
+        setShowPrompt(false);
+        setWeightInput('');
+      }
+    } catch (error) {
+      console.error('Error saving weight:', error);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const getTrendIcon = (change: number) => {
@@ -130,6 +156,21 @@ export default function WeightTracker({ startingWeight }: WeightTrackerProps) {
     const sign = change > 0 ? '+' : '';
     return `${sign}${change.toFixed(1)} kg`;
   };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-accent-purple/10 rounded-full flex items-center justify-center">
+            <Scale className="w-5 h-5 text-accent-purple" />
+          </div>
+          <div>
+            <div className="text-sm text-text-secondary">Loading weight data...</div>
+          </div>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <>
@@ -160,7 +201,7 @@ export default function WeightTracker({ startingWeight }: WeightTrackerProps) {
             )}
             <button
               onClick={() => setExpanded(!expanded)}
-              className="p-2 hover:bg-secondary-bg rounded-apple transition-colors"
+              className="p-2 hover:bg-secondary-bg rounded-apple transition-colors touch-manipulation"
             >
               {expanded ? (
                 <ChevronUp className="w-5 h-5 text-text-secondary" />
@@ -230,7 +271,7 @@ export default function WeightTracker({ startingWeight }: WeightTrackerProps) {
         {!todayLog && !showPrompt && (
           <button
             onClick={() => setShowModal(true)}
-            className="w-full mt-3 py-2 text-sm text-accent-purple hover:bg-accent-purple/5 rounded-apple transition-colors"
+            className="w-full mt-3 py-2 text-sm text-accent-purple hover:bg-accent-purple/5 rounded-apple transition-colors touch-manipulation"
           >
             + Log today&apos;s weight
           </button>
@@ -251,6 +292,7 @@ export default function WeightTracker({ startingWeight }: WeightTrackerProps) {
             <Input
               type="number"
               step="0.1"
+              inputMode="decimal"
               placeholder={latestWeight.toFixed(1)}
               value={weightInput}
               onChange={(e) => setWeightInput(e.target.value)}
@@ -262,8 +304,8 @@ export default function WeightTracker({ startingWeight }: WeightTrackerProps) {
             <Button variant="secondary" onClick={() => setShowModal(false)}>
               Cancel
             </Button>
-            <Button onClick={handleLogWeight} fullWidth disabled={!weightInput}>
-              Save
+            <Button onClick={handleLogWeight} fullWidth disabled={!weightInput || isSaving}>
+              {isSaving ? 'Saving...' : 'Save'}
             </Button>
           </div>
         </div>

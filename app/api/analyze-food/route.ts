@@ -104,7 +104,7 @@ const foodAnalysisSchema = {
 
 export async function POST(request: NextRequest) {
   try {
-    const { imageData, apiKey, previousAnalysis, answers } = await request.json();
+    const { imageData, apiKey, previousAnalysis, answers, additionalContext } = await request.json();
 
     if (!apiKey) {
       return NextResponse.json(
@@ -149,6 +149,12 @@ IMPORTANT for clarifying questions:
     // Build the user prompt
     let userPrompt = `Analyze this food image and break it down into components with nutrition info.`;
 
+    // Add additional context if provided (Image + Text mode)
+    if (additionalContext && additionalContext.trim()) {
+      userPrompt += `\n\nAdditional context from the user about this meal: "${additionalContext}"
+Use this information to improve your analysis - it may include details about ingredients, portion sizes, cooking methods, restaurant/brand names, or other relevant info that isn't visible in the image.`;
+    }
+
     if (previousAnalysis && answers && Object.keys(answers).length > 0) {
       userPrompt += `\n\nPrevious analysis identified this as: ${previousAnalysis.dish_name || previousAnalysis.foodName}
 User provided these clarifications:
@@ -157,35 +163,34 @@ ${Object.entries(answers).map(([id, answer]) => `- ${id}: ${answer}`).join('\n')
 Please update your estimates based on these answers and don't ask these questions again.`;
     }
 
-    console.log('[analyze-food] Calling OpenAI Responses API with GPT-5.2...');
+    console.log('[analyze-food] Calling OpenAI Chat Completions API with gpt-4o...');
 
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5.2',
-        input: [
+        model: 'gpt-4o',
+        messages: [
           { role: 'system', content: systemPrompt },
           {
             role: 'user',
             content: [
-              { type: 'input_text', text: userPrompt },
+              { type: 'text', text: userPrompt },
               {
-                type: 'input_image',
-                image_url: imageData,
-                detail: 'high',
+                type: 'image_url',
+                image_url: { url: imageData, detail: 'high' },
               },
             ],
           },
         ],
-        text: {
-          format: {
-            type: 'json_schema',
-            strict: true,
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
             name: 'food_image_analysis',
+            strict: true,
             schema: foodAnalysisSchema
           }
         }
@@ -202,29 +207,29 @@ Please update your estimates based on these answers and don't ask these question
     }
 
     const data = await response.json();
-    console.log('[analyze-food] Raw response status:', data.status);
+    console.log('[analyze-food] Raw response received');
 
     // Handle refusal
-    const output = data.output?.[0];
-    if (output?.content?.[0]?.type === 'refusal') {
-      console.error('[analyze-food] Model refused:', output.content[0].refusal);
+    const choice = data.choices?.[0];
+    if (choice?.message?.refusal) {
+      console.error('[analyze-food] Model refused:', choice.message.refusal);
       return NextResponse.json(
         { error: 'The AI could not analyze this image' },
         { status: 400 }
       );
     }
 
-    // Extract the structured output - GPT-5.2 uses "output_text" type
-    const textContent = output?.content?.find((c: { type: string }) => c.type === 'output_text' || c.type === 'text');
-    if (!textContent?.text) {
-      console.error('[analyze-food] No text content in response. Content types:', output?.content?.map((c: { type: string }) => c.type));
+    // Extract the content
+    const content = choice?.message?.content;
+    if (!content) {
+      console.error('[analyze-food] No content in response');
       return NextResponse.json(
         { error: 'No response from AI' },
         { status: 500 }
       );
     }
 
-    const analysis = JSON.parse(textContent.text);
+    const analysis = JSON.parse(content);
     console.log('[analyze-food] Parsed analysis:', analysis.dish_name);
     console.log('[analyze-food] Components:', analysis.components.length);
     console.log('[analyze-food] Total calories:', analysis.total_nutrition.calories);
