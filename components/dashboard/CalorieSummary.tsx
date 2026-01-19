@@ -2,13 +2,16 @@
 
 import ProgressRing from '@/components/ui/ProgressRing';
 import { calculatePercentage, formatNumber } from '@/lib/calories';
+import { Flame } from 'lucide-react';
 
 interface CalorieSummaryProps {
   consumed: number;
   goal: number;
+  baseGoal?: number;
+  activeBonus?: number;
 }
 
-export default function CalorieSummary({ consumed, goal }: CalorieSummaryProps) {
+export default function CalorieSummary({ consumed, goal, baseGoal, activeBonus = 0 }: CalorieSummaryProps) {
   const percentage = calculatePercentage(consumed, goal);
   const remaining = Math.max(0, goal - consumed);
   const isOver = consumed > goal;
@@ -37,7 +40,7 @@ export default function CalorieSummary({ consumed, goal }: CalorieSummaryProps) 
         </div>
       </ProgressRing>
 
-      <div className="mt-4 text-center">
+      <div className="mt-4 text-center space-y-1">
         {isOver ? (
           <p className="text-accent-red font-medium">
             {formatNumber(consumed - goal)} kcal over goal
@@ -46,6 +49,18 @@ export default function CalorieSummary({ consumed, goal }: CalorieSummaryProps) 
           <p className="text-text-secondary">
             <span className="text-accent-blue font-semibold">{formatNumber(remaining)}</span> kcal remaining
           </p>
+        )}
+
+        {/* Show active bonus breakdown */}
+        {activeBonus > 0 && baseGoal && (
+          <div className="flex items-center justify-center gap-1 text-xs text-text-secondary">
+            <span>{formatNumber(baseGoal)} base</span>
+            <span>+</span>
+            <span className="flex items-center gap-0.5 text-accent-orange font-medium">
+              <Flame className="w-3 h-3" />
+              {formatNumber(activeBonus)}
+            </span>
+          </div>
         )}
       </div>
     </div>

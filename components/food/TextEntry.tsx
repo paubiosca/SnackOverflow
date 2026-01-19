@@ -4,9 +4,13 @@ import { useState } from 'react';
 import { MealType, NutritionInfo, MEAL_LABELS } from '@/lib/types';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
+import { HelpCircle, Store, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 
 interface ParsedFood {
   name: string;
+  brand?: string | null;
+  portion?: string;
+  portionGrams?: number | null;
   nutrition: NutritionInfo;
   confidence: number;
 }
@@ -32,6 +36,8 @@ export default function TextEntry({ apiKey, onSubmit, onCancel }: TextEntryProps
   const [mealType, setMealType] = useState<MealType>('snack');
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<'input' | 'questions' | 'review'>('input');
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [reAnalyzingIndex, setReAnalyzingIndex] = useState<number | null>(null);
 
   const analyzeText = async (text: string, previousAnswers?: Record<string, string>) => {
     setIsAnalyzing(true);
@@ -73,6 +79,51 @@ export default function TextEntry({ apiKey, onSubmit, onCancel }: TextEntryProps
     e.preventDefault();
     if (description.trim()) {
       analyzeText(description);
+    }
+  };
+
+  const reAnalyzeIngredient = async (index: number) => {
+    const food = parsedFoods[index];
+    if (!food) return;
+
+    setReAnalyzingIndex(index);
+
+    try {
+      // Build a specific prompt for this ingredient
+      const ingredientDescription = `${food.name}${food.portion ? `, portion: ${food.portion}` : ''}${food.brand ? `, brand: ${food.brand}` : ''}`;
+
+      const response = await fetch('/api/analyze-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description: ingredientDescription,
+          apiKey,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to re-analyze');
+      }
+
+      // If we got a result, update just this item
+      if (data.foods && data.foods.length > 0) {
+        const updatedFood = data.foods[0];
+        const newParsedFoods = [...parsedFoods];
+        newParsedFoods[index] = {
+          ...newParsedFoods[index],
+          nutrition: updatedFood.nutrition,
+          confidence: updatedFood.confidence,
+          portion: updatedFood.portion || newParsedFoods[index].portion,
+          portionGrams: updatedFood.portionGrams || newParsedFoods[index].portionGrams,
+        };
+        setParsedFoods(newParsedFoods);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to re-analyze');
+    } finally {
+      setReAnalyzingIndex(null);
     }
   };
 
@@ -159,7 +210,7 @@ export default function TextEntry({ apiKey, onSubmit, onCancel }: TextEntryProps
         <div className="space-y-4">
           <Card className="bg-amber-50 border border-amber-200">
             <div className="flex items-center gap-2 mb-3">
-              <span className="text-xl">🤔</span>
+              <HelpCircle className="w-5 h-5 text-amber-600" />
               <h3 className="font-semibold text-text-primary">A few quick questions</h3>
             </div>
             <p className="text-sm text-text-secondary mb-4">
@@ -231,38 +282,107 @@ export default function TextEntry({ apiKey, onSubmit, onCancel }: TextEntryProps
             </div>
           </Card>
 
-          {/* Parsed foods */}
+          {/* Parsed foods - Clean summary */}
           <Card>
-            <h3 className="font-semibold text-text-primary mb-3">
-              I found {parsedFoods.length} item{parsedFoods.length > 1 ? 's' : ''}
-            </h3>
-            <div className="space-y-3">
-              {parsedFoods.map((food, index) => (
-                <div
-                  key={index}
-                  className="p-3 bg-secondary-bg rounded-apple"
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="font-medium text-text-primary">{food.name}</span>
-                    <span className="text-accent-blue font-semibold">{food.nutrition.calories} kcal</span>
-                  </div>
-                  <div className="flex gap-3 text-xs text-text-secondary">
-                    <span>P: {food.nutrition.protein}g</span>
-                    <span>C: {food.nutrition.carbs}g</span>
-                    <span>F: {food.nutrition.fat}g</span>
-                  </div>
-                </div>
-              ))}
+            {/* Total at top - most important info */}
+            <div className="flex justify-between items-center mb-4 pb-3 border-b border-border-light">
+              <div>
+                <span className="text-sm text-text-secondary">{parsedFoods.length} items</span>
+              </div>
+              <div className="text-right">
+                <span className="text-2xl font-bold text-accent-blue">
+                  {parsedFoods.reduce((sum, f) => sum + f.nutrition.calories, 0)}
+                </span>
+                <span className="text-sm text-text-secondary ml-1">kcal</span>
+              </div>
             </div>
 
-            {/* Total */}
-            <div className="mt-4 pt-3 border-t border-border-light">
-              <div className="flex justify-between items-center">
-                <span className="font-medium text-text-primary">Total</span>
-                <span className="text-lg font-bold text-accent-blue">
-                  {parsedFoods.reduce((sum, f) => sum + f.nutrition.calories, 0)} kcal
-                </span>
-              </div>
+            {/* Simple list - tap to expand */}
+            <div className="space-y-2">
+              {parsedFoods.map((food, index) => {
+                const isExpanded = expandedIndex === index;
+                return (
+                  <div
+                    key={index}
+                    className="rounded-apple overflow-hidden"
+                  >
+                    {/* Collapsed view - just name and calories */}
+                    <button
+                      onClick={() => setExpandedIndex(isExpanded ? null : index)}
+                      className="w-full p-3 bg-secondary-bg hover:bg-gray-100 transition-colors flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {food.brand && (
+                          <span className="text-xs text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded flex-shrink-0">
+                            {food.brand}
+                          </span>
+                        )}
+                        <span className="font-medium text-text-primary truncate">{food.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 ml-2">
+                        <span className="text-accent-blue font-semibold">{food.nutrition.calories}</span>
+                        {isExpanded ? (
+                          <ChevronUp className="w-4 h-4 text-gray-400" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-gray-400" />
+                        )}
+                      </div>
+                    </button>
+
+                    {/* Expanded details */}
+                    {isExpanded && (
+                      <div className="px-3 pb-3 bg-secondary-bg border-t border-gray-200">
+                        <div className="pt-2 space-y-2">
+                          {/* Portion */}
+                          {food.portion && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-text-secondary">Portion</span>
+                              <span className="text-text-primary">
+                                {food.portion}{food.portionGrams ? ` (${food.portionGrams}g)` : ''}
+                              </span>
+                            </div>
+                          )}
+                          {/* Macros */}
+                          <div className="flex justify-between text-sm">
+                            <span className="text-text-secondary">Protein</span>
+                            <span className="text-text-primary">{food.nutrition.protein}g</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-text-secondary">Carbs</span>
+                            <span className="text-text-primary">{food.nutrition.carbs}g</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-text-secondary">Fat</span>
+                            <span className="text-text-primary">{food.nutrition.fat}g</span>
+                          </div>
+
+                          {/* Re-analyze button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              reAnalyzeIngredient(index);
+                            }}
+                            disabled={reAnalyzingIndex === index}
+                            className="mt-2 w-full py-2 text-sm text-accent-purple hover:bg-accent-purple/10 rounded-apple transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                          >
+                            {reAnalyzingIndex === index ? (
+                              <>
+                                <span className="w-4 h-4 border-2 border-accent-purple border-t-transparent rounded-full animate-spin" />
+                                Re-analyzing...
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCw className="w-4 h-4" />
+                                Re-analyze this item
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </Card>
 

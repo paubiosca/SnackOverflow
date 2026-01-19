@@ -1,10 +1,11 @@
-import { UserProfile, FoodEntry, WaterLog, WeightLog } from './types';
+import { UserProfile, FoodEntry, WaterLog, WeightLog, ActiveCalorieLog } from './types';
 
 const STORAGE_KEYS = {
   PROFILE: 'snackoverflow-profile',
   FOOD_ENTRIES: 'snackoverflow-food',
   WATER_LOGS: 'snackoverflow-water',
   WEIGHT_LOGS: 'snackoverflow-weight',
+  ACTIVE_CALORIES: 'snackoverflow-active-calories',
 } as const;
 
 // Helper to check if we're in browser
@@ -118,6 +119,39 @@ export function addWeightLog(log: WeightLog): void {
 export function getLatestWeight(): number | null {
   const logs = getWeightLogs();
   return logs.length > 0 ? logs[0].weightKg : null;
+}
+
+// Active Calorie Logs
+export function getActiveCalorieLogs(): ActiveCalorieLog[] {
+  if (!isBrowser) return [];
+  const data = localStorage.getItem(STORAGE_KEYS.ACTIVE_CALORIES);
+  return data ? JSON.parse(data) : [];
+}
+
+export function saveActiveCalorieLogs(logs: ActiveCalorieLog[]): void {
+  if (!isBrowser) return;
+  localStorage.setItem(STORAGE_KEYS.ACTIVE_CALORIES, JSON.stringify(logs));
+}
+
+export function addActiveCalorieLog(log: ActiveCalorieLog): void {
+  const logs = getActiveCalorieLogs();
+  // Remove existing log for same date if any (only one entry per day)
+  const filtered = logs.filter(l => l.date !== log.date);
+  filtered.push(log);
+  // Sort by date descending
+  filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  saveActiveCalorieLogs(filtered);
+}
+
+export function getActiveCaloriesForDate(date: string): number {
+  const logs = getActiveCalorieLogs();
+  const log = logs.find(l => l.date === date);
+  return log ? log.calories : 0;
+}
+
+export function getActiveCalorieLogsForRange(startDate: string, endDate: string): ActiveCalorieLog[] {
+  const logs = getActiveCalorieLogs();
+  return logs.filter(l => l.date >= startDate && l.date <= endDate);
 }
 
 // Clear all data

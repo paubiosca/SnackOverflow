@@ -60,6 +60,7 @@ export default function Onboarding() {
       goalType,
       goalValue,
       dailyWaterGoalMl: 2000,
+      activeCalorieGoal: 450,
       openaiApiKey: openaiApiKey || undefined,
     };
 
@@ -85,6 +86,7 @@ export default function Onboarding() {
       goalType,
       goalValue,
       dailyWaterGoalMl: 2000,
+      activeCalorieGoal: 450,
       createdAt: '',
     };
     return calculateDailyCalorieGoal(tempProfile);

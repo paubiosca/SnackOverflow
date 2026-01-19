@@ -1,18 +1,32 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useProfile } from '@/hooks/useProfile';
 import { useFoodEntries } from '@/hooks/useFoodEntries';
 import { MealType, FoodEntry } from '@/lib/types';
+import { getActiveCaloriesForDate } from '@/lib/storage';
 import Card from '@/components/ui/Card';
 import BottomNav from '@/components/ui/BottomNav';
 import CalorieSummary from '@/components/dashboard/CalorieSummary';
 import MacroBreakdown from '@/components/dashboard/MacroBreakdown';
+import MealBreakdown from '@/components/dashboard/MealBreakdown';
 import MealSection from '@/components/dashboard/MealSection';
 import WaterTracker from '@/components/dashboard/WaterTracker';
+import WeightTracker from '@/components/dashboard/WeightTracker';
+import ActiveCaloriesTracker from '@/components/dashboard/ActiveCaloriesTracker';
+import WeeklyDeficitChart from '@/components/dashboard/WeeklyDeficitChart';
 import EditFoodModal from '@/components/food/EditFoodModal';
+
+// Helper to get local date string
+const getLocalDateString = (): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 export default function Dashboard() {
   const router = useRouter();
@@ -20,6 +34,20 @@ export default function Dashboard() {
   const { profile, isLoading: profileLoading, isOnboarded, isAuthenticated, calorieGoal, macroTargets } = useProfile();
   const { entries, totals, getEntriesByMeal, remove, update, isLoading: entriesLoading } = useFoodEntries();
   const [editingEntry, setEditingEntry] = useState<FoodEntry | null>(null);
+  const [activeCaloriesBurned, setActiveCaloriesBurned] = useState(0);
+
+  // Load active calories on mount
+  useEffect(() => {
+    const today = getLocalDateString();
+    setActiveCaloriesBurned(getActiveCaloriesForDate(today));
+  }, []);
+
+  // Adjusted calorie goal = base goal + active calories burned
+  const adjustedCalorieGoal = calorieGoal + activeCaloriesBurned;
+
+  const handleActiveCaloriesChange = useCallback((calories: number) => {
+    setActiveCaloriesBurned(calories);
+  }, []);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -64,16 +92,34 @@ export default function Dashboard() {
       <div className="px-4 py-4 space-y-4 page-transition">
         {/* Calorie Summary */}
         <Card>
-          <CalorieSummary consumed={totals.calories} goal={calorieGoal} />
+          <CalorieSummary
+            consumed={totals.calories}
+            goal={adjustedCalorieGoal}
+            baseGoal={calorieGoal}
+            activeBonus={activeCaloriesBurned}
+          />
           <MacroBreakdown
             protein={{ current: totals.protein, goal: macroTargets.protein }}
             carbs={{ current: totals.carbs, goal: macroTargets.carbs }}
             fat={{ current: totals.fat, goal: macroTargets.fat }}
           />
+          <MealBreakdown entries={entries} />
         </Card>
+
+        {/* Weekly Deficit Chart */}
+        <WeeklyDeficitChart baseCalorieGoal={calorieGoal} />
 
         {/* Water Tracker */}
         <WaterTracker goalMl={profile?.dailyWaterGoalMl || 2000} />
+
+        {/* Weight Tracker */}
+        <WeightTracker startingWeight={profile?.weightKg || 70} />
+
+        {/* Active Calories Tracker */}
+        <ActiveCaloriesTracker
+          goal={profile?.activeCalorieGoal || 450}
+          onActiveCaloriesChange={handleActiveCaloriesChange}
+        />
 
         {/* Meal Sections */}
         {mealTypes.map((mealType) => (

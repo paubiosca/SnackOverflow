@@ -42,11 +42,25 @@ export async function GET(request: Request) {
         goal_type VARCHAR(20) NOT NULL CHECK (goal_type IN ('deficit_fixed', 'weight_loss_rate')),
         goal_value DECIMAL(5,2) NOT NULL,
         daily_water_goal_ml INTEGER NOT NULL DEFAULT 2000,
+        active_calorie_goal INTEGER NOT NULL DEFAULT 450,
         openai_api_key TEXT,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
         UNIQUE(user_id)
       )
+    `;
+
+    // Add active_calorie_goal column if it doesn't exist (for existing installations)
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'profiles' AND column_name = 'active_calorie_goal'
+        ) THEN
+          ALTER TABLE profiles ADD COLUMN active_calorie_goal INTEGER NOT NULL DEFAULT 450;
+        END IF;
+      END $$;
     `;
 
     // Create food_entries table

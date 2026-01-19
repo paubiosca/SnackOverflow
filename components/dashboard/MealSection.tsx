@@ -1,7 +1,16 @@
 'use client';
 
-import { FoodEntry, MealType, MEAL_LABELS, MEAL_ICONS } from '@/lib/types';
+import { FoodEntry, MealType, MEAL_LABELS } from '@/lib/types';
 import Card from '@/components/ui/Card';
+import { Sunrise, Sun, Moon, Cookie, Trash2 } from 'lucide-react';
+import { ReactNode } from 'react';
+
+const MEAL_ICONS: Record<MealType, ReactNode> = {
+  breakfast: <Sunrise className="w-5 h-5 text-amber-500" />,
+  lunch: <Sun className="w-5 h-5 text-yellow-500" />,
+  dinner: <Moon className="w-5 h-5 text-indigo-500" />,
+  snack: <Cookie className="w-5 h-5 text-orange-400" />,
+};
 
 interface MealSectionProps {
   mealType: MealType;
@@ -18,7 +27,7 @@ export default function MealSection({ mealType, entries, onDelete, onEdit }: Mea
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-secondary-bg border-b border-border-light">
         <div className="flex items-center gap-2">
-          <span className="text-xl">{MEAL_ICONS[mealType]}</span>
+          {MEAL_ICONS[mealType]}
           <span className="font-semibold text-text-primary">{MEAL_LABELS[mealType]}</span>
         </div>
         <span className="text-sm font-medium text-text-secondary">
@@ -54,9 +63,7 @@ export default function MealSection({ mealType, entries, onDelete, onEdit }: Mea
                   className="opacity-0 group-hover:opacity-100 transition-opacity text-accent-red p-1"
                   aria-label="Delete entry"
                 >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
+                  <Trash2 className="w-5 h-5" />
                 </button>
               </div>
             </div>

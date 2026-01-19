@@ -6,6 +6,7 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import Input from '@/components/ui/Input';
+import { Droplets, GlassWater } from 'lucide-react';
 
 interface WaterTrackerProps {
   goalMl: number;
@@ -39,7 +40,7 @@ export default function WaterTracker({ goalMl }: WaterTrackerProps) {
           onClick={() => setShowLogs(!showLogs)}
         >
           <div className="flex items-center gap-2">
-            <span className="text-xl">💧</span>
+            <Droplets className="w-5 h-5 text-accent-blue" />
             <span className="font-semibold text-text-primary">Water</span>
           </div>
           <div className="flex items-center gap-2">
@@ -68,12 +69,10 @@ export default function WaterTracker({ goalMl }: WaterTrackerProps) {
         {/* Glass icons */}
         <div className="flex items-center gap-1 mb-3">
           {[...Array(8)].map((_, i) => (
-            <span
+            <GlassWater
               key={i}
-              className={`text-lg transition-opacity ${i < glasses ? 'opacity-100' : 'opacity-20'}`}
-            >
-              🥤
-            </span>
+              className={`w-5 h-5 transition-opacity ${i < glasses ? 'text-accent-blue opacity-100' : 'text-gray-300 opacity-50'}`}
+            />
           ))}
           <span className="ml-2 text-sm text-text-secondary">{glasses}/8 glasses</span>
         </div>

@@ -14,6 +14,7 @@ export interface UserProfile {
   goalType: GoalType;
   goalValue: number | null; // negative calories for deficit_fixed, kg/week for weight_loss_rate
   dailyWaterGoalMl: number;
+  activeCalorieGoal: number; // Daily active calorie goal (e.g., 450 from Apple Watch)
   createdAt: string;
   openaiApiKey?: string; // OpenAI API key (stored in database)
 }
@@ -45,6 +46,13 @@ export interface WeightLog {
   id: string;
   date: string;
   weightKg: number;
+}
+
+export interface ActiveCalorieLog {
+  id: string;
+  date: string;
+  calories: number;
+  source?: string; // 'apple_watch', 'manual', etc.
 }
 
 export interface NutritionInfo {

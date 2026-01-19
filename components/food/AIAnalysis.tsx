@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { AIFoodAnalysis, ClarifyingQuestion } from '@/lib/types';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import { HelpCircle } from 'lucide-react';
 
 interface AIAnalysisProps {
   imageData: string;
@@ -94,8 +95,8 @@ export default function AIAnalysis({
       {analysis.needsClarification && analysis.clarifyingQuestions && (
         <Card className="border-2 border-accent-orange/30 bg-orange-50">
           <div className="flex items-center gap-2 mb-4">
-            <span className="text-xl">🤔</span>
-            <h4 className="font-semibold text-text-primary">Help us be more accurate</h4>
+            <HelpCircle className="w-5 h-5 text-accent-orange" />
+            <h4 className="font-semibold text-text-primary">A few quick questions</h4>
           </div>
 
           <div className="space-y-4">

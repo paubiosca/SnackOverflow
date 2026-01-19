@@ -2,12 +2,21 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { BarChart3, Calendar, Plus, User } from 'lucide-react';
+import { ReactNode } from 'react';
 
-const navItems = [
-  { href: '/', label: 'Today', icon: '📊' },
-  { href: '/history', label: 'History', icon: '📅' },
-  { href: '/add-food', label: 'Add', icon: '➕', isMain: true },
-  { href: '/profile', label: 'Profile', icon: '👤' },
+interface NavItem {
+  href: string;
+  label: string;
+  icon: ReactNode;
+  isMain?: boolean;
+}
+
+const navItems: NavItem[] = [
+  { href: '/', label: 'Today', icon: <BarChart3 className="w-5 h-5" /> },
+  { href: '/history', label: 'History', icon: <Calendar className="w-5 h-5" /> },
+  { href: '/add-food', label: 'Add', icon: <Plus className="w-6 h-6 text-white" />, isMain: true },
+  { href: '/profile', label: 'Profile', icon: <User className="w-5 h-5" /> },
 ];
 
 export default function BottomNav() {
@@ -32,7 +41,7 @@ export default function BottomNav() {
                 className="flex flex-col items-center justify-center -mt-6"
               >
                 <div className="w-14 h-14 bg-accent-blue rounded-full flex items-center justify-center shadow-lg btn-press">
-                  <span className="text-2xl">{item.icon}</span>
+                  {item.icon}
                 </div>
               </Link>
             );
@@ -46,7 +55,7 @@ export default function BottomNav() {
                 isActive ? 'text-accent-blue' : 'text-text-secondary'
               }`}
             >
-              <span className="text-xl mb-0.5">{item.icon}</span>
+              <span className="mb-0.5">{item.icon}</span>
               <span className="text-xs font-medium">{item.label}</span>
             </Link>
           );

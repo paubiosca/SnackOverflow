@@ -12,6 +12,7 @@ export async function getProfile(userId: string): Promise<UserProfile | null> {
       goal_type as "goalType",
       goal_value as "goalValue",
       daily_water_goal_ml as "dailyWaterGoalMl",
+      COALESCE(active_calorie_goal, 450) as "activeCalorieGoal",
       openai_api_key as "openaiApiKey",
       created_at as "createdAt"
     FROM profiles
@@ -32,6 +33,7 @@ export async function getProfile(userId: string): Promise<UserProfile | null> {
     goalType: row.goalType,
     goalValue: Number(row.goalValue),
     dailyWaterGoalMl: Number(row.dailyWaterGoalMl),
+    activeCalorieGoal: Number(row.activeCalorieGoal),
     openaiApiKey: row.openaiApiKey,
     createdAt: row.createdAt,
   };
@@ -41,18 +43,19 @@ export async function createProfile(userId: string, profile: Omit<UserProfile, '
   const result = await sql`
     INSERT INTO profiles (
       user_id, name, age, gender, height_cm, weight_kg,
-      activity_level, goal_type, goal_value, daily_water_goal_ml, openai_api_key
+      activity_level, goal_type, goal_value, daily_water_goal_ml, active_calorie_goal, openai_api_key
     ) VALUES (
       ${userId}, ${profile.name}, ${profile.age}, ${profile.gender},
       ${profile.heightCm}, ${profile.weightKg}, ${profile.activityLevel},
       ${profile.goalType}, ${profile.goalValue}, ${profile.dailyWaterGoalMl},
-      ${profile.openaiApiKey || null}
+      ${profile.activeCalorieGoal || 450}, ${profile.openaiApiKey || null}
     )
     RETURNING
       id, name, age, gender,
       height_cm as "heightCm", weight_kg as "weightKg",
       activity_level as "activityLevel", goal_type as "goalType",
       goal_value as "goalValue", daily_water_goal_ml as "dailyWaterGoalMl",
+      COALESCE(active_calorie_goal, 450) as "activeCalorieGoal",
       openai_api_key as "openaiApiKey", created_at as "createdAt"
   `;
 
@@ -68,6 +71,7 @@ export async function createProfile(userId: string, profile: Omit<UserProfile, '
     goalType: row.goalType,
     goalValue: Number(row.goalValue),
     dailyWaterGoalMl: Number(row.dailyWaterGoalMl),
+    activeCalorieGoal: Number(row.activeCalorieGoal),
     openaiApiKey: row.openaiApiKey,
     createdAt: row.createdAt,
   };
@@ -85,6 +89,7 @@ export async function updateProfile(userId: string, updates: Partial<UserProfile
       goal_type = COALESCE(${updates.goalType ?? null}, goal_type),
       goal_value = COALESCE(${updates.goalValue ?? null}, goal_value),
       daily_water_goal_ml = COALESCE(${updates.dailyWaterGoalMl ?? null}, daily_water_goal_ml),
+      active_calorie_goal = COALESCE(${updates.activeCalorieGoal ?? null}, active_calorie_goal),
       openai_api_key = COALESCE(${updates.openaiApiKey ?? null}, openai_api_key),
       updated_at = NOW()
     WHERE user_id = ${userId}
@@ -93,6 +98,7 @@ export async function updateProfile(userId: string, updates: Partial<UserProfile
       height_cm as "heightCm", weight_kg as "weightKg",
       activity_level as "activityLevel", goal_type as "goalType",
       goal_value as "goalValue", daily_water_goal_ml as "dailyWaterGoalMl",
+      COALESCE(active_calorie_goal, 450) as "activeCalorieGoal",
       openai_api_key as "openaiApiKey", created_at as "createdAt"
   `;
 
@@ -110,6 +116,7 @@ export async function updateProfile(userId: string, updates: Partial<UserProfile
     goalType: row.goalType,
     goalValue: Number(row.goalValue),
     dailyWaterGoalMl: Number(row.dailyWaterGoalMl),
+    activeCalorieGoal: Number(row.activeCalorieGoal),
     openaiApiKey: row.openaiApiKey,
     createdAt: row.createdAt,
   };

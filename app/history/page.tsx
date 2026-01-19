@@ -4,10 +4,27 @@ import { useState, useMemo } from 'react';
 import { useProfile } from '@/hooks/useProfile';
 import { getFoodEntriesForDate } from '@/lib/storage';
 import { calculateDailyTotals, getCalorieStatus } from '@/lib/calories';
-import { FoodEntry, MEAL_LABELS, MEAL_ICONS, MealType } from '@/lib/types';
+import { FoodEntry, MEAL_LABELS, MealType } from '@/lib/types';
 import BottomNav from '@/components/ui/BottomNav';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
+import { Sunrise, Sun, Moon, Cookie } from 'lucide-react';
+import { ReactNode } from 'react';
+
+const MEAL_ICONS: Record<MealType, ReactNode> = {
+  breakfast: <Sunrise className="w-4 h-4 text-amber-500" />,
+  lunch: <Sun className="w-4 h-4 text-yellow-500" />,
+  dinner: <Moon className="w-4 h-4 text-indigo-500" />,
+  snack: <Cookie className="w-4 h-4 text-orange-400" />,
+};
+
+// Helper to get local date string (avoids timezone issues)
+const getLocalDateString = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 export default function History() {
   const { calorieGoal } = useProfile();
@@ -28,7 +45,7 @@ export default function History() {
       const date = new Date(year, month, -startPadding + i + 1);
       days.push({
         date,
-        dateString: date.toISOString().split('T')[0],
+        dateString: getLocalDateString(date),
         dayOfMonth: date.getDate(),
       });
     }
@@ -38,7 +55,7 @@ export default function History() {
       const date = new Date(year, month, i);
       days.push({
         date,
-        dateString: date.toISOString().split('T')[0],
+        dateString: getLocalDateString(date),
         dayOfMonth: i,
       });
     }
@@ -130,7 +147,7 @@ export default function History() {
           <div className="grid grid-cols-7 gap-1">
             {daysInMonth.map(({ date, dateString, dayOfMonth }) => {
               const isCurrentMonth = date.getMonth() === month;
-              const isToday = dateString === new Date().toISOString().split('T')[0];
+              const isToday = dateString === getLocalDateString(new Date());
               const isSelected = dateString === selectedDate;
               const status = isCurrentMonth ? getStatusForDate(dateString) : 'no_data';
 

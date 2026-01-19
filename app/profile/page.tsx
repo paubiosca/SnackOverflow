@@ -9,6 +9,7 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
+import { User, Flame } from 'lucide-react';
 
 export default function Profile() {
   const router = useRouter();
@@ -65,7 +66,7 @@ export default function Profile() {
               {session?.user?.image ? (
                 <img src={session.user.image} alt="" className="w-full h-full object-cover" />
               ) : (
-                <span className="text-3xl">👤</span>
+                <User className="w-8 h-8 text-accent-blue" />
               )}
             </div>
             <div>
@@ -169,6 +170,31 @@ export default function Profile() {
                 ))}
               </div>
             </div>
+
+            <div>
+              <label className="flex items-center gap-2 text-sm text-text-secondary mb-2">
+                <Flame className="w-4 h-4 text-accent-orange" />
+                Active Calorie Goal (from Apple Watch)
+              </label>
+              <div className="flex gap-2">
+                {[300, 450, 600, 750].map((kcal) => (
+                  <button
+                    key={kcal}
+                    onClick={() => updateProfile({ activeCalorieGoal: kcal })}
+                    className={`flex-1 py-2 rounded-apple border-2 text-sm transition-all ${
+                      profile.activeCalorieGoal === kcal
+                        ? 'border-accent-orange bg-orange-50 text-accent-orange'
+                        : 'border-border-light text-text-secondary'
+                    }`}
+                  >
+                    {kcal}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-text-secondary mt-2">
+                Active calories add to your daily budget when you exercise
+              </p>
+            </div>
           </div>
         </Card>
 
@@ -183,7 +209,7 @@ export default function Profile() {
         {/* App info */}
         <div className="text-center text-sm text-text-secondary py-4">
           <p>SnackOverflow v1.0.0</p>
-          <p>Made with 🍔 and AI</p>
+          <p>Made with love and AI</p>
         </div>
       </div>
 

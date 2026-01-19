@@ -11,8 +11,29 @@ import CameraCapture from '@/components/food/CameraCapture';
 import AIAnalysis from '@/components/food/AIAnalysis';
 import ManualEntry from '@/components/food/ManualEntry';
 import TextEntry from '@/components/food/TextEntry';
+import { MessageSquare, Camera, PenLine, AlertTriangle, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 
 type Mode = 'select' | 'camera' | 'analyzing' | 'results' | 'manual' | 'text';
+
+// Helper to format date
+const formatDate = (date: Date): string => {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (date.toDateString() === today.toDateString()) return 'Today';
+  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+
+  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+};
+
+const getDateString = (date: Date): string => {
+  // Use local date to avoid timezone issues
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 export default function AddFood() {
   const router = useRouter();
@@ -26,6 +47,24 @@ export default function AddFood() {
   const [isRefining, setIsRefining] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [selectedMealType, setSelectedMealType] = useState<MealType>('snack');
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+
+  const goToPreviousDay = () => {
+    const newDate = new Date(selectedDate);
+    newDate.setDate(newDate.getDate() - 1);
+    setSelectedDate(newDate);
+  };
+
+  const goToNextDay = () => {
+    const newDate = new Date(selectedDate);
+    newDate.setDate(newDate.getDate() + 1);
+    // Don't allow future dates
+    if (newDate <= new Date()) {
+      setSelectedDate(newDate);
+    }
+  };
+
+  const isToday = selectedDate.toDateString() === new Date().toDateString();
 
   const analyzeImage = async (image: string, prevAnalysis?: AIFoodAnalysis, currentAnswers?: Record<string, string>) => {
     if (!profile?.openaiApiKey) {
@@ -97,6 +136,7 @@ export default function AddFood() {
       isManualEntry: false,
       aiConfidence: confirmedAnalysis.confidence,
       photoUrl: imageData || undefined,
+      date: getDateString(selectedDate),
     });
     router.push('/');
   };
@@ -110,6 +150,7 @@ export default function AddFood() {
       carbs: data.nutrition.carbs,
       fat: data.nutrition.fat,
       isManualEntry: true,
+      date: getDateString(selectedDate),
     });
     router.push('/');
   };
@@ -124,6 +165,7 @@ export default function AddFood() {
         carbs: food.nutrition.carbs,
         fat: food.nutrition.fat,
         isManualEntry: false,
+        date: getDateString(selectedDate),
       });
     });
     router.push('/');
@@ -148,7 +190,39 @@ export default function AddFood() {
     <main className="min-h-screen pb-24">
       {/* Header */}
       <header className="bg-white px-4 pt-12 pb-4 sticky top-0 z-40 shadow-sm">
-        <h1 className="text-2xl font-bold text-text-primary">Add Food</h1>
+        <h1 className="text-2xl font-bold text-text-primary mb-3">Add Food</h1>
+
+        {/* Date Picker */}
+        <div className="flex items-center justify-center gap-2 bg-secondary-bg rounded-apple p-2">
+          <button
+            onClick={goToPreviousDay}
+            className="p-2 hover:bg-white rounded-full transition-colors"
+          >
+            <ChevronLeft className="w-5 h-5 text-text-secondary" />
+          </button>
+
+          <div className="flex items-center gap-2 px-3">
+            <Calendar className="w-4 h-4 text-accent-blue" />
+            <span className={`font-medium ${isToday ? 'text-accent-blue' : 'text-text-primary'}`}>
+              {formatDate(selectedDate)}
+            </span>
+            {!isToday && (
+              <span className="text-xs text-text-secondary">
+                ({selectedDate.toLocaleDateString()})
+              </span>
+            )}
+          </div>
+
+          <button
+            onClick={goToNextDay}
+            disabled={isToday}
+            className={`p-2 rounded-full transition-colors ${
+              isToday ? 'opacity-30 cursor-not-allowed' : 'hover:bg-white'
+            }`}
+          >
+            <ChevronRight className="w-5 h-5 text-text-secondary" />
+          </button>
+        </div>
       </header>
 
       <div className="px-4 py-4 page-transition">
@@ -172,7 +246,7 @@ export default function AddFood() {
             >
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 bg-accent-purple/10 rounded-full flex items-center justify-center">
-                  <span className="text-3xl">💬</span>
+                  <MessageSquare className="w-8 h-8 text-accent-purple" />
                 </div>
                 <div className="text-left">
                   <h3 className="font-semibold text-text-primary text-lg">Describe Your Meal</h3>
@@ -189,7 +263,7 @@ export default function AddFood() {
             >
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 bg-accent-blue/10 rounded-full flex items-center justify-center">
-                  <span className="text-3xl">📸</span>
+                  <Camera className="w-8 h-8 text-accent-blue" />
                 </div>
                 <div className="text-left">
                   <h3 className="font-semibold text-text-primary text-lg">Snap a Photo</h3>
@@ -206,7 +280,7 @@ export default function AddFood() {
             >
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 bg-accent-green/10 rounded-full flex items-center justify-center">
-                  <span className="text-3xl">✏️</span>
+                  <PenLine className="w-8 h-8 text-accent-green" />
                 </div>
                 <div className="text-left">
                   <h3 className="font-semibold text-text-primary text-lg">Enter Manually</h3>
@@ -220,7 +294,7 @@ export default function AddFood() {
             {!profile?.openaiApiKey && (
               <Card className="bg-amber-50 border border-amber-200">
                 <div className="flex gap-3">
-                  <span className="text-xl">⚠️</span>
+                  <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="text-sm text-amber-800 font-medium">AI not configured</p>
                     <p className="text-xs text-amber-700 mt-1">
