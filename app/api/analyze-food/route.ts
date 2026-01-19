@@ -20,7 +20,7 @@ const foodAnalysisSchema = {
           },
           estimated_amount: {
             type: "string",
-            description: "Estimated portion size based on visual (e.g., '150g', '2 tbsp', '1 cup')"
+            description: "Estimated portion size in metric units (e.g., '150g', '30ml', '2 eggs', '1 slice')"
           },
           nutrition: {
             type: "object",
@@ -130,6 +130,11 @@ When analyzing an image:
 4. Calculate nutrition for each component separately
 5. Sum up the totals
 6. If anything is visually ambiguous, add a clarifying question
+
+IMPORTANT: Always use metric measurements (grams, ml). Never use cups, tablespoons, or ounces.
+- Use grams (g) for solid foods: "150g chicken", "30g cheese"
+- Use milliliters (ml) for liquids: "200ml milk", "15ml oil"
+- Use units for countable items: "2 eggs", "1 slice", "3 cookies"
 
 Use realistic portion estimates. Round all numbers to whole values.
 

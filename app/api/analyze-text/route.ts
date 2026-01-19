@@ -139,12 +139,17 @@ When analyzing a dish:
 5. Sum up the totals
 6. If anything is ambiguous that significantly affects calories, add a clarifying question
 
+IMPORTANT: Always use metric measurements (grams, ml). Never use cups, tablespoons, or ounces.
+- Use grams (g) for solid foods: "150g chicken", "30g cheese"
+- Use milliliters (ml) for liquids: "200ml milk", "15ml oil"
+- Use units for countable items: "2 eggs", "1 slice", "3 cookies"
+
 Be specific about components - for example, a "Caesar salad" should break down into:
-- Romaine lettuce (amount)
-- Parmesan cheese (amount)
-- Caesar dressing (amount)
-- Croutons (amount)
-- Grilled chicken if mentioned (amount)
+- Romaine lettuce (100g)
+- Parmesan cheese (20g)
+- Caesar dressing (30ml)
+- Croutons (25g)
+- Grilled chicken if mentioned (120g)
 
 Use realistic restaurant/homemade portion sizes. Round all numbers to whole values.
 
