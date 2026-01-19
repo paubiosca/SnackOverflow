@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useSession } from 'next-auth/react';
 import { useProfile } from '@/hooks/useProfile';
-import { getFoodEntriesForDate } from '@/lib/storage';
 import { calculateDailyTotals, getCalorieStatus } from '@/lib/calories';
 import { FoodEntry, MEAL_LABELS, MealType } from '@/lib/types';
 import BottomNav from '@/components/ui/BottomNav';
@@ -27,12 +27,50 @@ const getLocalDateString = (date: Date): string => {
 };
 
 export default function History() {
+  const { data: session } = useSession();
   const { calorieGoal } = useProfile();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [entriesCache, setEntriesCache] = useState<Record<string, FoodEntry[]>>({});
+  const [isLoadingEntries, setIsLoadingEntries] = useState(false);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
+
+  // Fetch entries for the visible month
+  const fetchEntriesForMonth = useCallback(async () => {
+    if (!session?.user) return;
+
+    setIsLoadingEntries(true);
+    try {
+      // Fetch all entries (the API returns all entries for the user)
+      const res = await fetch('/api/food');
+      if (res.ok) {
+        const { entries } = await res.json();
+        // Group by date
+        const grouped: Record<string, FoodEntry[]> = {};
+        (entries || []).forEach((entry: FoodEntry) => {
+          if (!grouped[entry.date]) {
+            grouped[entry.date] = [];
+          }
+          grouped[entry.date].push(entry);
+        });
+        setEntriesCache(grouped);
+      }
+    } catch (error) {
+      console.error('Error fetching entries:', error);
+    } finally {
+      setIsLoadingEntries(false);
+    }
+  }, [session]);
+
+  useEffect(() => {
+    fetchEntriesForMonth();
+  }, [fetchEntriesForMonth]);
+
+  const getEntriesForDate = useCallback((date: string): FoodEntry[] => {
+    return entriesCache[date] || [];
+  }, [entriesCache]);
 
   const daysInMonth = useMemo(() => {
     const firstDay = new Date(year, month, 1);
@@ -64,7 +102,7 @@ export default function History() {
   }, [year, month]);
 
   const getStatusForDate = (dateString: string) => {
-    const entries = getFoodEntriesForDate(dateString);
+    const entries = getEntriesForDate(dateString);
     if (entries.length === 0) return 'no_data';
     const totals = calculateDailyTotals(entries);
     return getCalorieStatus(totals.calories, calorieGoal);
@@ -85,7 +123,7 @@ export default function History() {
     setCurrentDate(new Date(year, month + 1, 1));
   };
 
-  const selectedDayEntries = selectedDate ? getFoodEntriesForDate(selectedDate) : [];
+  const selectedDayEntries = selectedDate ? getEntriesForDate(selectedDate) : [];
   const selectedDayTotals = calculateDailyTotals(selectedDayEntries);
 
   const entriesByMeal = useMemo(() => {
