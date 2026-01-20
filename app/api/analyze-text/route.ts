@@ -168,7 +168,7 @@ IMPORTANT for clarifying questions:
       userPrompt += `\n\nUser provided these clarifications:\n${Object.entries(answers).map(([id, answer]) => `- ${id}: ${answer}`).join('\n')}\n\nPlease update your estimates based on these answers and don't ask these questions again.`;
     }
 
-    console.log('[analyze-text] Calling OpenAI Chat Completions API with gpt-4o...');
+    console.log('[analyze-text] Calling OpenAI Chat Completions API with gpt-5.2...');
     console.log('[analyze-text] Description:', description);
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -178,7 +178,7 @@ IMPORTANT for clarifying questions:
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'gpt-5.2',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }

@@ -103,7 +103,7 @@ Always use metric measurements. Be realistic with quantities.`;
       ];
     }
 
-    console.log('[analyze-ingredients] Calling OpenAI Chat Completions API...');
+    console.log('[analyze-ingredients] Calling OpenAI Chat Completions API with gpt-5.2...');
 
     // Convert user content to OpenAI chat completions format
     const messageContent = userContent.map((c: { type: string; text?: string; image_url?: string; detail?: string }) => {
@@ -122,7 +122,7 @@ Always use metric measurements. Be realistic with quantities.`;
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'gpt-5.2',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: messageContent },

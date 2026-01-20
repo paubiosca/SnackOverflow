@@ -73,24 +73,24 @@ Calculated recommended intake: ${recommendedIntake} calories/day
 
 Based on this profile, estimate their current daily calorie intake and provide actionable tips. Be realistic - someone with large portions and frequent snacking likely eats 20-40% above their TDEE. Someone with small portions might be at or slightly below TDEE.`;
 
-    console.log('[onboarding-analyze] Calling OpenAI API...');
+    console.log('[onboarding-analyze] Calling OpenAI API with gpt-5.2...');
 
-    const response = await fetch('https://api.openai.com/v1/responses', {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${data.apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4.1-mini',
-        input: [
+        model: 'gpt-5.2',
+        messages: [
           { role: 'user', content: prompt }
         ],
-        text: {
-          format: {
-            type: 'json_schema',
-            strict: true,
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
             name: 'calorie_analysis',
+            strict: true,
             schema: analysisResponseSchema
           }
         }
@@ -105,22 +105,26 @@ Based on this profile, estimate their current daily calorie intake and provide a
     }
 
     const responseData = await response.json();
-    console.log('[onboarding-analyze] Response status:', responseData.status);
+    console.log('[onboarding-analyze] Response received');
 
-    // Extract the structured output
-    const output = responseData.output?.[0];
-    const textContent = output?.content?.find((c: { type: string }) => c.type === 'output_text' || c.type === 'text');
+    // Extract the structured output from chat completions format
+    const choice = responseData.choices?.[0];
+    if (choice?.message?.refusal) {
+      console.error('[onboarding-analyze] Model refused:', choice.message.refusal);
+      return NextResponse.json(calculateFallbackAnalysis(data, recommendedIntake));
+    }
 
-    if (!textContent?.text) {
-      console.error('[onboarding-analyze] No text content in response');
+    const content = choice?.message?.content;
+    if (!content) {
+      console.error('[onboarding-analyze] No content in response');
       return NextResponse.json(calculateFallbackAnalysis(data, recommendedIntake));
     }
 
     let parsed;
     try {
-      parsed = JSON.parse(textContent.text);
+      parsed = JSON.parse(content);
     } catch {
-      console.error('[onboarding-analyze] Failed to parse AI response:', textContent.text);
+      console.error('[onboarding-analyze] Failed to parse AI response:', content);
       return NextResponse.json(calculateFallbackAnalysis(data, recommendedIntake));
     }
 

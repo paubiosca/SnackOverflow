@@ -134,7 +134,7 @@ ${preferenceContext}
 
 Suggest recipes I can make with these ingredients. Include variety in difficulty and prep time.`;
 
-    console.log('[suggest-recipes] Calling OpenAI Chat Completions API...');
+    console.log('[suggest-recipes] Calling OpenAI Chat Completions API with gpt-5.2...');
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -143,7 +143,7 @@ Suggest recipes I can make with these ingredients. Include variety in difficulty
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'gpt-5.2',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },

@@ -163,7 +163,7 @@ ${Object.entries(answers).map(([id, answer]) => `- ${id}: ${answer}`).join('\n')
 Please update your estimates based on these answers and don't ask these questions again.`;
     }
 
-    console.log('[analyze-food] Calling OpenAI Chat Completions API with gpt-4o...');
+    console.log('[analyze-food] Calling OpenAI Chat Completions API with gpt-5.2...');
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -172,7 +172,7 @@ Please update your estimates based on these answers and don't ask these question
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'gpt-5.2',
         messages: [
           { role: 'system', content: systemPrompt },
           {
