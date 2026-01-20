@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { BarChart3, Calendar, Plus, User } from 'lucide-react';
 import { ReactNode } from 'react';
