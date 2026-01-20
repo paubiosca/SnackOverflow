@@ -23,7 +23,7 @@ interface ClarifyingQuestion {
 
 interface TextEntryProps {
   apiKey: string;
-  onSubmit: (foods: { name: string; mealType: MealType; nutrition: NutritionInfo }[]) => void;
+  onSubmit: (foods: { name: string; mealType: MealType; nutrition: NutritionInfo }[]) => void | Promise<void>;
   onCancel: () => void;
   defaultMealType?: MealType;
 }
@@ -40,6 +40,7 @@ export default function TextEntry({ apiKey, onSubmit, onCancel, defaultMealType 
   const [step, setStep] = useState<'input' | 'questions' | 'review'>('input');
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [reAnalyzingIndex, setReAnalyzingIndex] = useState<number | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -180,13 +181,16 @@ export default function TextEntry({ apiKey, onSubmit, onCancel, defaultMealType 
     }
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
+    if (isSubmitting) return; // Prevent double-clicks
+    setIsSubmitting(true);
     const foodsWithMealType = parsedFoods.map(food => ({
       name: food.name,
       mealType,
       nutrition: food.nutrition,
     }));
-    onSubmit(foodsWithMealType);
+    await onSubmit(foodsWithMealType);
+    // Don't reset isSubmitting - we're navigating away
   };
 
   const handleStartOver = () => {
@@ -478,11 +482,18 @@ export default function TextEntry({ apiKey, onSubmit, onCancel, defaultMealType 
           </Card>
 
           <div className="flex gap-3">
-            <Button variant="secondary" onClick={handleStartOver}>
+            <Button variant="secondary" onClick={handleStartOver} disabled={isSubmitting}>
               Start Over
             </Button>
-            <Button onClick={handleConfirm} fullWidth>
-              Add {parsedFoods.length} Item{parsedFoods.length > 1 ? 's' : ''} to Log
+            <Button onClick={handleConfirm} fullWidth disabled={isSubmitting}>
+              {isSubmitting ? (
+                <span className="flex items-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Saving...
+                </span>
+              ) : (
+                `Add ${parsedFoods.length} Item${parsedFoods.length > 1 ? 's' : ''} to Log`
+              )}
             </Button>
           </div>
         </div>

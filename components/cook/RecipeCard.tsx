@@ -8,12 +8,22 @@ import { Clock, ChefHat, ChevronDown, ChevronUp, Utensils } from 'lucide-react';
 
 interface RecipeCardProps {
   recipe: Recipe;
-  onLog: (recipe: Recipe) => void;
+  onLog: (recipe: Recipe) => void | Promise<void>;
   fitsInBudget: boolean;
 }
 
 export default function RecipeCard({ recipe, onLog, fitsInBudget }: RecipeCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [isLogging, setIsLogging] = useState(false);
+
+  const handleLog = async () => {
+    setIsLogging(true);
+    try {
+      await onLog(recipe);
+    } finally {
+      setIsLogging(false);
+    }
+  };
 
   const difficultyColors = {
     easy: 'text-accent-green bg-green-50',
@@ -125,8 +135,15 @@ export default function RecipeCard({ recipe, onLog, fitsInBudget }: RecipeCardPr
 
       {/* Log button */}
       <div className="mt-4">
-        <Button onClick={() => onLog(recipe)} fullWidth variant="secondary">
-          Log as Meal
+        <Button onClick={handleLog} fullWidth variant="secondary" disabled={isLogging}>
+          {isLogging ? (
+            <span className="flex items-center gap-2">
+              <span className="w-4 h-4 border-2 border-accent-orange border-t-transparent rounded-full animate-spin" />
+              Logging...
+            </span>
+          ) : (
+            'Log as Meal'
+          )}
         </Button>
       </div>
     </Card>

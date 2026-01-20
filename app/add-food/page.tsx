@@ -94,7 +94,9 @@ export default function AddFood() {
         fat: Math.max(0, macroTargets.fat - currentTotals.fat),
       });
     }
-  }, [entries, profile, calorieGoal, macroTargets, currentTotals]);
+  // Note: macroTargets is derived from calorieGoal, so we don't include it as a dependency
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, profile, calorieGoal]);
 
   useEffect(() => {
     setSelectedMealType(suggestMealType());
@@ -171,10 +173,10 @@ export default function AddFood() {
     }
   };
 
-  const handleLogPreviewedFood = () => {
+  const handleLogPreviewedFood = async () => {
     if (!foodPreview) return;
 
-    add({
+    await add({
       name: foodPreview.name,
       mealType: selectedMealType,
       calories: foodPreview.nutrition.calories,
@@ -187,20 +189,26 @@ export default function AddFood() {
     router.push('/');
   };
 
-  const handleTextSubmit = (foods: { name: string; mealType: MealType; nutrition: NutritionInfo }[]) => {
-    foods.forEach(food => {
-      add({
-        name: food.name,
-        mealType: food.mealType,
-        calories: food.nutrition.calories,
-        protein: food.nutrition.protein,
-        carbs: food.nutrition.carbs,
-        fat: food.nutrition.fat,
-        isManualEntry: false,
-        date: getDateString(selectedDate),
-      });
-    });
-    router.push('/');
+  const handleTextSubmit = async (foods: { name: string; mealType: MealType; nutrition: NutritionInfo }[]) => {
+    console.log('[handleTextSubmit] Starting to add', foods.length, 'foods');
+    try {
+      await Promise.all(foods.map(food =>
+        add({
+          name: food.name,
+          mealType: food.mealType,
+          calories: food.nutrition.calories,
+          protein: food.nutrition.protein,
+          carbs: food.nutrition.carbs,
+          fat: food.nutrition.fat,
+          isManualEntry: false,
+          date: getDateString(selectedDate),
+        })
+      ));
+      console.log('[handleTextSubmit] All foods added, navigating to /');
+      router.push('/');
+    } catch (error) {
+      console.error('[handleTextSubmit] Error:', error);
+    }
   };
 
   const handleCancel = () => {
@@ -284,8 +292,8 @@ export default function AddFood() {
     }
   };
 
-  const handleLogRecipe = (recipe: Recipe) => {
-    add({
+  const handleLogRecipe = async (recipe: Recipe) => {
+    await add({
       name: recipe.name,
       mealType: selectedMealType,
       calories: recipe.nutrition.calories,

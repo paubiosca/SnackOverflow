@@ -8,7 +8,7 @@ import MacroBudgetDisplay from './MacroBudgetDisplay';
 interface RecipeListProps {
   recipes: Recipe[];
   remainingBudget: MacroBudget;
-  onLog: (recipe: Recipe) => void;
+  onLog: (recipe: Recipe) => void | Promise<void>;
   onBack: () => void;
   onDone: () => void;
 }
