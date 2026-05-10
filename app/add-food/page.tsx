@@ -192,6 +192,10 @@ export default function AddFood() {
       fat: s.fat,
       isManualEntry: false,
       date: getDateString(selectedDate),
+      // When the chip came from the pantry, link the new entry so the server
+      // knows to decrement the pantry stock for that item.
+      pantryItemId: s.pantryItemId,
+      source: s.source === 'pantry' ? 'pantry' : 'recent',
     });
     if (created?.id) {
       setRecentlyAdded((prev) => [

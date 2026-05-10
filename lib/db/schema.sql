@@ -129,6 +129,9 @@ ALTER TABLE pantry_items ADD COLUMN IF NOT EXISTS nutrition_confidence VARCHAR(1
 -- back to the original product page. Stored as TEXT (URLs can be long).
 ALTER TABLE pantry_items ADD COLUMN IF NOT EXISTS nutrition_citation TEXT;
 ALTER TABLE pantry_items ADD COLUMN IF NOT EXISTS product_image_url TEXT;
+-- Pack weight (grams) so portion math like "half this pack" can resolve to a
+-- real gram count. Optional; falls back to per-unit kcal when absent.
+ALTER TABLE pantry_items ADD COLUMN IF NOT EXISTS pack_grams DECIMAL(7,1);
 
 -- Async logging + pantry-link columns on food_entries (idempotent additions)
 ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS consumed_at TIMESTAMP WITH TIME ZONE;

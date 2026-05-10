@@ -97,6 +97,12 @@ export interface FoodSuggestion {
   // For pantry chips
   pantryItemId?: string;
   qtyRemaining?: number;
+  // Per-unit basis: 'g' = calories field is per 100g; 'item' = per pack/unit;
+  // 'ml' = per 100ml. Drives portion math in the chip handler.
+  unit?: 'g' | 'item' | 'ml';
+  // Total grams in the pack, when known. Lets the portion sheet resolve "half"
+  // to a real gram count and scale calories accordingly.
+  packGrams?: number;
   // For "ate this Y times" / "last on" hints
   occurrences?: number;
   lastEatenAt?: string;

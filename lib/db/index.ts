@@ -1,9 +1,20 @@
 import { sql } from '@vercel/postgres';
 import { FoodEntry, FoodEntryStatus, FoodEntrySource, FoodSuggestion, PantryItem, WaterLog, WeightLog, UserProfile, MealType, ActivityApproach, ClarifyingSuggestion } from '../types';
 
+// IMPORTANT: every SELECT that returns a Postgres `DATE` column must wrap it
+// in TO_CHAR(date, 'YYYY-MM-DD'). The Neon driver (under @vercel/postgres)
+// returns DATE columns as JS Date objects at midnight LOCAL TIME, which
+// JSON-serialize to the *previous* day in UTC for users east of Greenwich.
+// This caused today's food to appear under yesterday's bar on /history.
+// TO_CHAR forces a string round-trip so the date stays intact.
+
 // Shared SELECT projection for food_entries — keeps reads consistent across queries.
+// DATE columns are formatted via TO_CHAR so the driver returns them as strings
+// in YYYY-MM-DD form. Otherwise pg returns a JS Date at midnight local-time,
+// which JSON-serializes to the previous day in UTC for users east of Greenwich
+// — causing today's entries to land under yesterday on /history.
 const FOOD_ENTRY_COLUMNS = `
-  id, name, meal_type as "mealType", date,
+  id, name, meal_type as "mealType", TO_CHAR(date, 'YYYY-MM-DD') as date,
   consumed_at as "consumedAt",
   calories, protein, carbs, fat,
   is_manual_entry as "isManualEntry",
@@ -249,6 +260,11 @@ export async function addFoodEntry(userId: string, entry: Partial<FoodEntry> & P
       entry.inputDescription ?? null, entry.additionalContext ?? null,
     ]
   );
+  // If this entry consumed something from the pantry, decrement the stock so
+  // the chip stops appearing once the user has eaten through it.
+  if (entry.pantryItemId && status === 'resolved') {
+    await decrementPantryItem(userId, entry.pantryItemId, 1).catch(() => {});
+  }
   return rowToFoodEntry(result.rows[0]);
 }
 
@@ -453,7 +469,7 @@ export async function getFoodSuggestions(userId: string, opts?: { limit?: number
     LIMIT ${limit}
   `;
 
-  return result.rows.map((row): FoodSuggestion => ({
+  const fromHistory: FoodSuggestion[] = result.rows.map((row): FoodSuggestion => ({
     source: row.hour_distance <= 2 ? 'time-of-day' : (row.occurrences >= 3 ? 'frequent' : 'recent'),
     name: row.name,
     mealType: row.mealType as MealType,
@@ -464,6 +480,53 @@ export async function getFoodSuggestions(userId: string, opts?: { limit?: number
     occurrences: Number(row.occurrences),
     lastEatenAt: row.lastEatenAt ? new Date(row.lastEatenAt).toISOString() : undefined,
   }));
+
+  // Pantry chips: anything you bought that's still on the shelf shows up as a
+  // one-tap chip in the rail. Per-100g items get scaled to a 100g portion;
+  // per-item items use their per-unit nutrition directly. Decrement on pick is
+  // handled by addFoodEntry when pantryItemId is set on the new entry.
+  const pantryRows = await sql`
+    SELECT
+      id, normalized_name AS "normalizedName",
+      qty_remaining AS "qtyRemaining", unit,
+      est_calories_per_unit AS "kcal",
+      est_protein_per_unit AS "protein",
+      est_carbs_per_unit AS "carbs",
+      est_fat_per_unit AS "fat"
+    FROM pantry_items
+    WHERE user_id = ${userId} AND status = 'active' AND qty_remaining > 0
+      AND est_calories_per_unit IS NOT NULL
+    ORDER BY purchased_at DESC NULLS LAST
+    LIMIT 12
+  `;
+  const pantrySuggestions: FoodSuggestion[] = pantryRows.rows.map((row): FoodSuggestion => {
+    // Default meal type for pantry: time-of-day heuristic (caller passes mealType to onPick).
+    const mealType: MealType =
+      hour >= 5 && hour < 11 ? 'breakfast' :
+      hour >= 11 && hour < 15 ? 'lunch' :
+      hour >= 17 && hour < 21 ? 'dinner' : 'snack';
+    return {
+      source: 'pantry',
+      name: row.normalizedName,
+      mealType,
+      calories: Math.round(Number(row.kcal) || 0),
+      protein: Math.round(Number(row.protein) || 0),
+      carbs: Math.round(Number(row.carbs) || 0),
+      fat: Math.round(Number(row.fat) || 0),
+      pantryItemId: row.id,
+      qtyRemaining: Number(row.qtyRemaining),
+    };
+  });
+
+  // Pantry chips first (they're the freshest/most-actionable), then history.
+  // De-dupe by name so a pantry item doesn't double up with a recent log of
+  // the same name.
+  const seen = new Set(pantrySuggestions.map((p) => p.name.toLowerCase()));
+  const merged = [
+    ...pantrySuggestions,
+    ...fromHistory.filter((h) => !seen.has(h.name.toLowerCase())),
+  ];
+  return merged.slice(0, limit);
 }
 
 // History of resolved entries grouped by lower(name) within an optional mealType filter,
@@ -561,6 +624,9 @@ export interface BulkPantryInput {
   nutritionConfidence?: 'high' | 'medium' | 'low' | null;
   nutritionCitation?: string | null;
   productImageUrl?: string | null;
+  // Total grams in the pack (e.g. 220g ham). Lets the portion sheet compute
+  // "half this pack" → grams → kcal. Falls back to per-unit kcal when null.
+  packGrams?: number | null;
 }
 
 // Inserts a batch of pantry rows. Used by the receipt-import flow after the
@@ -573,8 +639,8 @@ export async function bulkInsertPantryItems(userId: string, items: BulkPantryInp
          user_id, raw_text, normalized_name, qty_total, qty_remaining, unit,
          est_calories_per_unit, est_protein_per_unit, est_carbs_per_unit, est_fat_per_unit,
          store, source, purchased_at, nutrition_source, nutrition_confidence,
-         nutrition_citation, product_image_url
-       ) VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+         nutrition_citation, product_image_url, pack_grams
+       ) VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
        RETURNING id, raw_text as "rawText", normalized_name as "normalizedName",
          qty_total as "qtyTotal", qty_remaining as "qtyRemaining", unit,
          est_calories_per_unit as "estCaloriesPerUnit",
@@ -599,6 +665,7 @@ export async function bulkInsertPantryItems(userId: string, items: BulkPantryInp
         it.nutritionConfidence ?? null,
         it.nutritionCitation ?? null,
         it.productImageUrl ?? null,
+        it.packGrams ?? null,
       ]
     );
     const row = r.rows[0];
@@ -904,7 +971,7 @@ export async function deleteStravaActivity(userId: string, stravaActivityId: num
 // to add running calories on top of Apple Health basal+walking.
 export async function getStravaKcalByDate(userId: string, startDate: string, endDate: string): Promise<{ date: string; kcal: number }[]> {
   const r = await sql`
-    SELECT date, COALESCE(SUM(kcal), 0)::int as kcal
+    SELECT TO_CHAR(date, 'YYYY-MM-DD') as date, COALESCE(SUM(kcal), 0)::int as kcal
     FROM strava_activities
     WHERE user_id = ${userId} AND date >= ${startDate} AND date <= ${endDate}
     GROUP BY date ORDER BY date
@@ -971,7 +1038,8 @@ export interface DailyActivity {
 export async function getDailyActivityInRange(userId: string, startDate: string, endDate: string): Promise<DailyActivity[]> {
   const r = await sql`
     SELECT
-      date, active_kcal as "activeKcal", bmr_kcal as "bmrKcal", total_kcal as "totalKcal",
+      TO_CHAR(date, 'YYYY-MM-DD') as date,
+      active_kcal as "activeKcal", bmr_kcal as "bmrKcal", total_kcal as "totalKcal",
       steps, resting_hr as "restingHr"
     FROM daily_activity
     WHERE user_id = ${userId} AND date >= ${startDate} AND date <= ${endDate}
@@ -990,7 +1058,8 @@ export async function getDailyActivityInRange(userId: string, startDate: string,
 export async function getDailyActivity(userId: string, date: string): Promise<DailyActivity | null> {
   const r = await sql`
     SELECT
-      date, active_kcal as "activeKcal", bmr_kcal as "bmrKcal", total_kcal as "totalKcal",
+      TO_CHAR(date, 'YYYY-MM-DD') as date,
+      active_kcal as "activeKcal", bmr_kcal as "bmrKcal", total_kcal as "totalKcal",
       steps, resting_hr as "restingHr"
     FROM daily_activity
     WHERE user_id = ${userId} AND date = ${date}
@@ -1020,7 +1089,7 @@ export async function decrementPantryItem(userId: string, id: string, qty: numbe
 // Water log operations
 export async function getWaterLogs(userId: string, date: string): Promise<WaterLog[]> {
   const result = await sql`
-    SELECT id, date, amount_ml as "amountMl", logged_at as "loggedAt"
+    SELECT id, TO_CHAR(date, 'YYYY-MM-DD') as date, amount_ml as "amountMl", logged_at as "loggedAt"
     FROM water_logs
     WHERE user_id = ${userId} AND date = ${date}
     ORDER BY logged_at DESC
@@ -1037,7 +1106,7 @@ export async function addWaterLog(userId: string, log: Omit<WaterLog, 'id'>): Pr
   const result = await sql`
     INSERT INTO water_logs (user_id, date, amount_ml)
     VALUES (${userId}, ${log.date}, ${log.amountMl})
-    RETURNING id, date, amount_ml as "amountMl"
+    RETURNING id, TO_CHAR(date, 'YYYY-MM-DD') as date, amount_ml as "amountMl"
   `;
 
   const row = result.rows[0];
@@ -1058,7 +1127,7 @@ export async function deleteWaterLog(userId: string, id: string): Promise<boolea
 // Weight log operations
 export async function getWeightLogs(userId: string): Promise<WeightLog[]> {
   const result = await sql`
-    SELECT id, date, weight_kg as "weightKg"
+    SELECT id, TO_CHAR(date, 'YYYY-MM-DD') as date, weight_kg as "weightKg"
     FROM weight_logs
     WHERE user_id = ${userId}
     ORDER BY date DESC
@@ -1075,7 +1144,7 @@ export async function addWeightLog(userId: string, log: Omit<WeightLog, 'id'>): 
   const result = await sql`
     INSERT INTO weight_logs (user_id, date, weight_kg)
     VALUES (${userId}, ${log.date}, ${log.weightKg})
-    RETURNING id, date, weight_kg as "weightKg"
+    RETURNING id, TO_CHAR(date, 'YYYY-MM-DD') as date, weight_kg as "weightKg"
   `;
 
   const row = result.rows[0];
@@ -1118,7 +1187,7 @@ export async function getFoodEntriesInRange(userId: string, startDate: string, e
 
 export async function getWeightLogsInRange(userId: string, startDate: string, endDate: string): Promise<WeightLog[]> {
   const result = await sql`
-    SELECT id, date, weight_kg as "weightKg"
+    SELECT id, TO_CHAR(date, 'YYYY-MM-DD') as date, weight_kg as "weightKg"
     FROM weight_logs
     WHERE user_id = ${userId} AND date >= ${startDate} AND date <= ${endDate}
     ORDER BY date ASC
@@ -1138,7 +1207,7 @@ export async function getDailyCalorieSummaries(
 ): Promise<{ date: string; totalCalories: number; totalProtein: number; totalCarbs: number; totalFat: number }[]> {
   const result = await sql`
     SELECT
-      date,
+      TO_CHAR(date, 'YYYY-MM-DD') as date,
       COALESCE(SUM(calories), 0) as "totalCalories",
       COALESCE(SUM(protein), 0) as "totalProtein",
       COALESCE(SUM(carbs), 0) as "totalCarbs",
@@ -1160,7 +1229,7 @@ export async function getDailyCalorieSummaries(
 
 export async function getDatesWithEntries(userId: string, startDate: string, endDate: string): Promise<string[]> {
   const result = await sql`
-    SELECT DISTINCT date
+    SELECT DISTINCT TO_CHAR(date, 'YYYY-MM-DD') as date
     FROM food_entries
     WHERE user_id = ${userId} AND date >= ${startDate} AND date <= ${endDate}
     ORDER BY date ASC
