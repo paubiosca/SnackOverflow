@@ -40,7 +40,10 @@ export default function InsightsPage() {
   if (error) {
     return (
       <main className="min-h-screen pb-24">
-        <header className="bg-white px-4 pt-12 pb-4 sticky top-0 z-40 shadow-sm">
+        <header
+          className="bg-white px-4 pb-4 sticky top-0 z-40 shadow-sm"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
+        >
           <div className="flex items-center gap-3">
             <button
               onClick={() => router.back()}
@@ -68,7 +71,10 @@ export default function InsightsPage() {
   return (
     <main className="min-h-screen pb-24">
       {/* Header */}
-      <header className="bg-white px-4 pt-12 pb-4 sticky top-0 z-40 shadow-sm">
+      <header
+          className="bg-white px-4 pb-4 sticky top-0 z-40 shadow-sm"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
+        >
         <div className="flex items-center gap-3 mb-4">
           <button
             onClick={() => router.back()}

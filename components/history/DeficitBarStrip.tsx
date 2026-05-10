@@ -22,7 +22,10 @@ interface Props {
 // equals "doubled your planned deficit" or "lost a full day".
 export default function DeficitBarStrip({ days, targetDeficit, selectedDate, onSelect }: Props) {
   const D = Math.max(100, targetDeficit); // safety floor; keeps the math sane
-  const HALF = 56; // pixels per side of the midline; tuned for iPhone viewport
+  const HALF = 64; // pixels per side of the midline; tuned for iPhone viewport
+  // Bar width grows when the window is short so 7-day view feels solid.
+  const barWidth = days.length <= 7 ? 28 : days.length <= 14 ? 18 : 10;
+  const gap = days.length <= 7 ? 6 : 3;
 
   const items = useMemo(() => {
     return days.map((d) => {
@@ -38,7 +41,10 @@ export default function DeficitBarStrip({ days, targetDeficit, selectedDate, onS
 
   return (
     <div className="select-none">
-      <div className="flex items-end justify-center gap-[3px] px-1" style={{ height: HALF * 2 + 16 }}>
+      <div
+        className="flex items-end justify-center px-1"
+        style={{ height: HALF * 2 + 16, gap: `${gap}px` }}
+      >
         {items.map((d) => {
           const above = d.delta >= 0;
           const isSelected = d.date === selectedDate;
@@ -50,7 +56,7 @@ export default function DeficitBarStrip({ days, targetDeficit, selectedDate, onS
               key={d.date}
               onClick={() => onSelect(d.date)}
               className="relative flex flex-col items-center justify-center group"
-              style={{ height: HALF * 2 + 16, width: 10, WebkitTapHighlightColor: 'transparent' }}
+              style={{ height: HALF * 2 + 16, width: barWidth, WebkitTapHighlightColor: 'transparent' }}
               aria-label={`${d.date}: ${d.consumed} kcal, goal ${d.goal}`}
             >
               {/* Top half (under-goal, positive deficit) */}

@@ -39,7 +39,26 @@ export default function SuggestionsRail({ mealType, onPick }: Props) {
     return () => { cancelled = true; };
   }, [session]);
 
-  if (loading || items.length === 0) return null;
+  if (loading) {
+    return (
+      <div className="-mx-4 px-4 mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-medium text-text-primary">Quick log</h3>
+          <span className="text-xs text-text-secondary">loading…</span>
+        </div>
+        <div className="flex gap-2 overflow-hidden pb-2 -mx-1 px-1">
+          {[0, 1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="skeleton shrink-0 rounded-2xl"
+              style={{ width: 160, height: 64 }}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+  if (items.length === 0) return null;
 
   return (
     <div className="-mx-4 px-4 mb-4">

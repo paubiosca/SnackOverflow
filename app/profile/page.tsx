@@ -7,6 +7,7 @@ import { useProfile } from '@/hooks/useProfile';
 import BottomNav from '@/components/ui/BottomNav';
 import Card from '@/components/ui/Card';
 import HealthSync from '@/components/profile/HealthSync';
+import QuickBackfill from '@/components/profile/QuickBackfill';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
@@ -84,13 +85,19 @@ export default function Profile() {
   return (
     <main className="min-h-screen pb-24">
       {/* Header */}
-      <header className="bg-white px-4 pt-12 pb-4 sticky top-0 z-40 shadow-sm">
+      <header
+        className="bg-white px-4 pb-4 sticky top-0 z-40 shadow-sm"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
+      >
         <h1 className="text-2xl font-bold text-text-primary">Profile</h1>
       </header>
 
       <div className="px-4 py-4 space-y-4 page-transition">
         {/* Apple Health sync (iOS Shortcut) */}
         <HealthSync />
+
+        {/* Quick backfill: type-one-number fallback for users who don't want the Shortcut */}
+        <QuickBackfill />
 
         {/* User info */}
         <Card>

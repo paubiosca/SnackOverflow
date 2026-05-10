@@ -178,7 +178,10 @@ export default function AddFood() {
 
   return (
     <main className="min-h-screen pb-32">
-      <header className="bg-white px-4 pt-12 pb-4 sticky top-0 z-40 shadow-sm">
+      <header
+        className="bg-white px-4 pb-4 sticky top-0 z-40 shadow-sm"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
+      >
         <h1 className="text-2xl font-bold text-text-primary mb-3">Add Food</h1>
 
         <div className="flex items-center justify-center gap-2 bg-secondary-bg rounded-apple p-2">

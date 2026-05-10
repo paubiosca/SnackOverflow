@@ -18,6 +18,7 @@ import WeeklyDeficitChart from '@/components/dashboard/WeeklyDeficitChart';
 import EditFoodModal from '@/components/food/EditFoodModal';
 import ClarifySheet from '@/components/food/ClarifySheet';
 import BurnedCaloriesTile from '@/components/dashboard/BurnedCaloriesTile';
+import DashboardSkeleton from '@/components/dashboard/DashboardSkeleton';
 import CalibrationCard from '@/components/dashboard/CalibrationCard';
 import AlternativesCard from '@/components/food/AlternativesCard';
 
@@ -62,14 +63,7 @@ export default function Dashboard() {
   }, [status, profileLoading, isOnboarded, isAuthenticated, router]);
 
   if (status === 'loading' || profileLoading || entriesLoading || !isOnboarded) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-accent-blue border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-text-secondary">Loading...</p>
-        </div>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   const today = new Date().toLocaleDateString('en-US', {
@@ -83,7 +77,10 @@ export default function Dashboard() {
   return (
     <main className="min-h-screen pb-24">
       {/* Header */}
-      <header className="bg-white px-4 pt-12 pb-4 sticky top-0 z-40 shadow-sm">
+      <header
+        className="bg-white px-4 pb-4 sticky top-0 z-40 shadow-sm"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
+      >
         <h1 className="text-2xl font-bold text-text-primary">Today</h1>
         <p className="text-text-secondary">{today}</p>
       </header>
