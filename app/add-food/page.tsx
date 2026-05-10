@@ -9,6 +9,7 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import SuggestionsRail from '@/components/food/SuggestionsRail';
 import ProcessingTray from '@/components/food/ProcessingTray';
+import ClarifyCard from '@/components/food/ClarifyCard';
 import { AlertTriangle, ChevronLeft, ChevronRight, Calendar, Camera, Image as ImageIcon, X, Check } from 'lucide-react';
 
 // Sentinel stored in `notes` to mark a "Just curious" entry. The DB schema
@@ -45,7 +46,7 @@ type Intent = 'eating' | 'curious';
 export default function AddFood() {
   const { profile } = useProfile();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const { entries, logAsync, add, remove, update } = useFoodEntries(getDateString(selectedDate));
+  const { entries, logAsync, add, remove, update, answerClarification } = useFoodEntries(getDateString(selectedDate));
 
   const [error, setError] = useState<string | null>(null);
   const [selectedMealType, setSelectedMealType] = useState<MealType>(suggestMealType());
@@ -344,6 +345,21 @@ export default function AddFood() {
             <div className="mt-3 text-center text-sm text-accent-green">{confirmation}</div>
           )}
         </Card>
+
+        {/* Inline clarifications: any entry the worker came back with a
+            follow-up question for shows up here so the user can answer it
+            without leaving /add-food. The dashboard still mirrors these via
+            ClarifySheet. */}
+        {entries
+          .filter((e) => e.status === 'needs_clarification' && !!e.clarifyingQuestion)
+          .map((e) => (
+            <ClarifyCard
+              key={e.id}
+              entry={e}
+              onAnswer={(ans) => answerClarification(e.id, ans)}
+              onDismiss={() => remove(e.id)}
+            />
+          ))}
       </div>
 
       <ProcessingTray

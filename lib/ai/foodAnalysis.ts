@@ -155,7 +155,7 @@ export async function analyzeFood(input: FoodAnalysisInput): Promise<FoodAnalysi
       Authorization: `Bearer ${input.apiKey}`,
     },
     body: JSON.stringify({
-      model: 'gpt-5.2',
+      model: 'gpt-5.5',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userContent },

@@ -543,6 +543,78 @@ export async function getActivePantryItems(userId: string): Promise<PantryItem[]
   }));
 }
 
+export interface BulkPantryInput {
+  rawText?: string;
+  normalizedName: string;
+  qtyTotal: number;
+  unit: string;
+  estCaloriesPerUnit?: number | null;
+  estProteinPerUnit?: number | null;
+  estCarbsPerUnit?: number | null;
+  estFatPerUnit?: number | null;
+  store?: string | null;
+  source: 'receipt' | 'manual';
+  purchasedAt?: string | null;
+  nutritionSource?: 'off' | 'web' | 'estimate' | 'manual' | null;
+  nutritionConfidence?: 'high' | 'medium' | 'low' | null;
+}
+
+// Inserts a batch of pantry rows. Used by the receipt-import flow after the
+// user confirms the parsed items on the review screen.
+export async function bulkInsertPantryItems(userId: string, items: BulkPantryInput[]): Promise<PantryItem[]> {
+  const inserted: PantryItem[] = [];
+  for (const it of items) {
+    const r = await sql.query(
+      `INSERT INTO pantry_items (
+         user_id, raw_text, normalized_name, qty_total, qty_remaining, unit,
+         est_calories_per_unit, est_protein_per_unit, est_carbs_per_unit, est_fat_per_unit,
+         store, source, purchased_at, nutrition_source, nutrition_confidence
+       ) VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+       RETURNING id, raw_text as "rawText", normalized_name as "normalizedName",
+         qty_total as "qtyTotal", qty_remaining as "qtyRemaining", unit,
+         est_calories_per_unit as "estCaloriesPerUnit",
+         est_protein_per_unit as "estProteinPerUnit",
+         est_carbs_per_unit as "estCarbsPerUnit",
+         est_fat_per_unit as "estFatPerUnit",
+         store, source, status, purchased_at as "purchasedAt"`,
+      [
+        userId,
+        it.rawText ?? null,
+        it.normalizedName,
+        it.qtyTotal,
+        it.unit ?? 'item',
+        it.estCaloriesPerUnit ?? null,
+        it.estProteinPerUnit ?? null,
+        it.estCarbsPerUnit ?? null,
+        it.estFatPerUnit ?? null,
+        it.store ?? null,
+        it.source,
+        it.purchasedAt ?? null,
+        it.nutritionSource ?? null,
+        it.nutritionConfidence ?? null,
+      ]
+    );
+    const row = r.rows[0];
+    inserted.push({
+      id: row.id,
+      rawText: row.rawText ?? undefined,
+      normalizedName: row.normalizedName,
+      qtyTotal: Number(row.qtyTotal),
+      qtyRemaining: Number(row.qtyRemaining),
+      unit: row.unit ?? 'item',
+      estCaloriesPerUnit: row.estCaloriesPerUnit !== null ? Number(row.estCaloriesPerUnit) : undefined,
+      estProteinPerUnit: row.estProteinPerUnit !== null ? Number(row.estProteinPerUnit) : undefined,
+      estCarbsPerUnit: row.estCarbsPerUnit !== null ? Number(row.estCarbsPerUnit) : undefined,
+      estFatPerUnit: row.estFatPerUnit !== null ? Number(row.estFatPerUnit) : undefined,
+      store: row.store ?? undefined,
+      source: row.source as PantryItem['source'],
+      status: row.status as PantryItem['status'],
+      purchasedAt: row.purchasedAt ? new Date(row.purchasedAt).toISOString() : undefined,
+    });
+  }
+  return inserted;
+}
+
 // Health ingest tokens ----------------------------------------------------------
 
 export interface HealthToken {
@@ -601,6 +673,153 @@ export async function getUserIdByHealthToken(token: string): Promise<string | nu
 
 export async function touchHealthToken(token: string): Promise<void> {
   await sql`UPDATE health_tokens SET last_used_at = NOW() WHERE token = ${token}`;
+}
+
+// Strava ----------------------------------------------------------------------
+
+export interface StravaAccount {
+  id: string;
+  athleteId: number;
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: string;
+  scope: string | null;
+  connectedAt: string;
+}
+
+export async function upsertStravaAccount(userId: string, data: {
+  athleteId: number;
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: Date;
+  scope?: string | null;
+}): Promise<void> {
+  await sql`
+    INSERT INTO strava_accounts (user_id, athlete_id, access_token, refresh_token, expires_at, scope)
+    VALUES (${userId}, ${data.athleteId}, ${data.accessToken}, ${data.refreshToken}, ${data.expiresAt.toISOString()}, ${data.scope ?? null})
+    ON CONFLICT (athlete_id) DO UPDATE SET
+      access_token = EXCLUDED.access_token,
+      refresh_token = EXCLUDED.refresh_token,
+      expires_at = EXCLUDED.expires_at,
+      scope = COALESCE(EXCLUDED.scope, strava_accounts.scope),
+      updated_at = NOW()
+  `;
+}
+
+export async function getStravaAccount(userId: string): Promise<StravaAccount | null> {
+  const r = await sql`
+    SELECT id, athlete_id as "athleteId", access_token as "accessToken",
+           refresh_token as "refreshToken", expires_at as "expiresAt",
+           scope, connected_at as "connectedAt"
+    FROM strava_accounts WHERE user_id = ${userId} LIMIT 1
+  `;
+  if (r.rows.length === 0) return null;
+  const row = r.rows[0];
+  return {
+    id: row.id,
+    athleteId: Number(row.athleteId),
+    accessToken: row.accessToken,
+    refreshToken: row.refreshToken,
+    expiresAt: new Date(row.expiresAt).toISOString(),
+    scope: row.scope ?? null,
+    connectedAt: new Date(row.connectedAt).toISOString(),
+  };
+}
+
+export async function getStravaAccountByAthleteId(athleteId: number): Promise<{ userId: string } & StravaAccount | null> {
+  const r = await sql`
+    SELECT user_id as "userId", id, athlete_id as "athleteId", access_token as "accessToken",
+           refresh_token as "refreshToken", expires_at as "expiresAt",
+           scope, connected_at as "connectedAt"
+    FROM strava_accounts WHERE athlete_id = ${athleteId} LIMIT 1
+  `;
+  if (r.rows.length === 0) return null;
+  const row = r.rows[0];
+  return {
+    userId: row.userId,
+    id: row.id,
+    athleteId: Number(row.athleteId),
+    accessToken: row.accessToken,
+    refreshToken: row.refreshToken,
+    expiresAt: new Date(row.expiresAt).toISOString(),
+    scope: row.scope ?? null,
+    connectedAt: new Date(row.connectedAt).toISOString(),
+  };
+}
+
+export async function deleteStravaAccount(userId: string): Promise<void> {
+  await sql`DELETE FROM strava_accounts WHERE user_id = ${userId}`;
+}
+
+export interface StravaActivityRow {
+  id: string;
+  stravaActivityId: number;
+  activityType: string;
+  name: string | null;
+  startDate: string;
+  date: string;
+  movingTimeSec: number | null;
+  distanceM: number | null;
+  kcal: number | null;
+}
+
+export async function upsertStravaActivity(userId: string, data: {
+  stravaActivityId: number;
+  activityType: string;
+  name?: string | null;
+  startDate: Date;
+  date: string; // YYYY-MM-DD local
+  movingTimeSec?: number | null;
+  distanceM?: number | null;
+  kcal?: number | null;
+  raw?: unknown;
+}): Promise<void> {
+  await sql`
+    INSERT INTO strava_activities (
+      user_id, strava_activity_id, activity_type, name, start_date, date,
+      moving_time_sec, distance_m, kcal, raw
+    ) VALUES (
+      ${userId}, ${data.stravaActivityId}, ${data.activityType}, ${data.name ?? null},
+      ${data.startDate.toISOString()}, ${data.date},
+      ${data.movingTimeSec ?? null}, ${data.distanceM ?? null}, ${data.kcal ?? null},
+      ${data.raw ? JSON.stringify(data.raw) : null}::jsonb
+    )
+    ON CONFLICT (user_id, strava_activity_id) DO UPDATE SET
+      activity_type = EXCLUDED.activity_type,
+      name = EXCLUDED.name,
+      start_date = EXCLUDED.start_date,
+      date = EXCLUDED.date,
+      moving_time_sec = EXCLUDED.moving_time_sec,
+      distance_m = EXCLUDED.distance_m,
+      kcal = COALESCE(EXCLUDED.kcal, strava_activities.kcal),
+      raw = COALESCE(EXCLUDED.raw, strava_activities.raw)
+  `;
+}
+
+export async function deleteStravaActivity(userId: string, stravaActivityId: number): Promise<void> {
+  await sql`
+    DELETE FROM strava_activities WHERE user_id = ${userId} AND strava_activity_id = ${stravaActivityId}
+  `;
+}
+
+// Sum of Strava-derived kcal for a given date range — used by the dashboard
+// to add running calories on top of Apple Health basal+walking.
+export async function getStravaKcalByDate(userId: string, startDate: string, endDate: string): Promise<{ date: string; kcal: number }[]> {
+  const r = await sql`
+    SELECT date, COALESCE(SUM(kcal), 0)::int as kcal
+    FROM strava_activities
+    WHERE user_id = ${userId} AND date >= ${startDate} AND date <= ${endDate}
+    GROUP BY date ORDER BY date
+  `;
+  return r.rows.map((row) => ({ date: row.date, kcal: Number(row.kcal) }));
+}
+
+export async function getStravaKcalForDate(userId: string, date: string): Promise<number> {
+  const r = await sql`
+    SELECT COALESCE(SUM(kcal), 0)::int as kcal
+    FROM strava_activities WHERE user_id = ${userId} AND date = ${date}
+  `;
+  return Number(r.rows[0]?.kcal ?? 0);
 }
 
 // Daily activity ---------------------------------------------------------------

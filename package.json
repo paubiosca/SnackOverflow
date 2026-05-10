@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:setup": "tsx scripts/setup-db.ts"
+    "db:setup": "tsx scripts/setup-db.ts",
+    "db:backfill": "tsx scripts/backfill-history.ts",
+    "db:remove-backfill": "tsx scripts/remove-backfill.ts"
   },
   "dependencies": {
     "@vercel/postgres": "^0.10.0",

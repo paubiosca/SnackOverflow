@@ -82,7 +82,7 @@ Based on this profile, estimate their current daily calorie intake and provide a
         'Authorization': `Bearer ${data.apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5.2',
+        model: 'gpt-5.5',
         messages: [
           { role: 'user', content: prompt }
         ],

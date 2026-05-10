@@ -54,6 +54,10 @@ export default function History() {
   const [activityByDate, setActivityByDate] = useState<Record<string, ActivityRow>>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // Hydration guard — see app/page.tsx note. Server returns a stable shell;
+  // todayStr / new Date() only run after mount on the client.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   const todayStr = useMemo(() => toLocalDate(new Date()), []);
   const window = useMemo(() => buildWindow(todayStr, range), [todayStr, range]);
@@ -143,7 +147,7 @@ export default function History() {
             <RangeToggle value={range} onChange={(r) => { setRange(r); setSelectedDate(null); }} />
           </div>
 
-          {isLoading ? (
+          {isLoading || !mounted ? (
             <BarStripSkeleton count={range} />
           ) : (
             <DeficitBarStrip
@@ -265,9 +269,10 @@ export default function History() {
 function BarStripSkeleton({ count }: { count: number }) {
   // Match DeficitBarStrip's silhouette: midline + bars of varying heights so
   // the user sees the chart shape forming before the data lands.
-  const barWidth = count <= 7 ? 28 : count <= 14 ? 18 : 10;
-  const gap = count <= 7 ? 6 : 3;
-  const HALF = 64;
+  const barWidth = count <= 7 ? 28 : count <= 14 ? 16 : 9;
+  const gap = count <= 7 ? 8 : count <= 14 ? 4 : 3;
+  const HALF = 90;
+  const GUTTER = 36;
   // Deterministic pseudo-random based on index so SSR and client render identical
   // markup (avoids hydration mismatch). Looks varied enough to feel natural.
   const heights = Array.from({ length: count }, (_, i) => {
@@ -282,21 +287,23 @@ function BarStripSkeleton({ count }: { count: number }) {
   });
   return (
     <div className="select-none">
-      <div className="relative flex justify-center px-1" style={{ height: HALF * 2, gap: `${gap}px` }}>
+      <div className="relative" style={{ height: HALF * 2, paddingRight: GUTTER }}>
         <div
-          className="absolute left-0 right-0 border-t border-dashed border-border-light pointer-events-none"
-          style={{ top: HALF }}
+          className="absolute left-0 border-t border-dashed border-gray-200 pointer-events-none"
+          style={{ top: HALF, right: GUTTER }}
         />
-        {heights.map((h, i) => (
-          <div key={i} className="flex flex-col items-stretch" style={{ height: HALF * 2, width: barWidth }}>
-            <div className="flex items-end justify-center" style={{ height: HALF }}>
-              {aboves[i] && <Skeleton className="w-full rounded-t-sm" style={{ height: h }} />}
+        <div className="absolute inset-0 flex justify-center" style={{ paddingRight: GUTTER, gap: `${gap}px` }}>
+          {heights.map((h, i) => (
+            <div key={i} className="flex flex-col items-stretch" style={{ height: HALF * 2, width: barWidth }}>
+              <div className="flex items-end justify-center" style={{ height: HALF }}>
+                {aboves[i] && <Skeleton className="w-full rounded-t-sm" style={{ height: h }} />}
+              </div>
+              <div className="flex items-start justify-center" style={{ height: HALF }}>
+                {!aboves[i] && <Skeleton className="w-full rounded-b-sm" style={{ height: h }} />}
+              </div>
             </div>
-            <div className="flex items-start justify-center" style={{ height: HALF }}>
-              {!aboves[i] && <Skeleton className="w-full rounded-b-sm" style={{ height: h }} />}
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
       <div className="flex items-center justify-between mt-3">
         <SkeletonLine className="w-12 h-2.5" />

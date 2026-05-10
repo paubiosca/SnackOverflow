@@ -20,7 +20,6 @@ import ClarifySheet from '@/components/food/ClarifySheet';
 import BurnedCaloriesTile from '@/components/dashboard/BurnedCaloriesTile';
 import DashboardSkeleton from '@/components/dashboard/DashboardSkeleton';
 import CalibrationCard from '@/components/dashboard/CalibrationCard';
-import AlternativesCard from '@/components/food/AlternativesCard';
 
 export default function Dashboard() {
   const router = useRouter();
@@ -32,16 +31,21 @@ export default function Dashboard() {
   // Active calories now come from Apple Health (auto-synced via the iOS Shortcut)
   // instead of manual entry. 0 if no Health data has been ingested yet.
   const [activeCaloriesBurned, setActiveCaloriesBurned] = useState(0);
+  // Hydration guard. Server and first client render BOTH return the skeleton;
+  // we only switch to real content after mount. Avoids any hydration mismatch
+  // from session state, locale-dependent date formatting, or async hooks.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     fetch('/api/health/status')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        const t = data?.today;
-        if (!t) return;
-        // Prefer the explicit active number; fall back to total - bmr.
-        const active = t.activeKcal ?? (t.totalKcal != null && t.bmrKcal != null ? t.totalKcal - t.bmrKcal : 0);
-        setActiveCaloriesBurned(Math.max(0, active ?? 0));
+        if (!data) return;
+        // Combined active kcal = Apple Health (walking/incidental) + Strava
+        // (Garmin runs). The server computes this; trust it.
+        const combined = data.combined?.activeKcal ?? 0;
+        setActiveCaloriesBurned(Math.max(0, combined));
       })
       .catch(() => {});
   }, []);
@@ -62,7 +66,7 @@ export default function Dashboard() {
     }
   }, [status, profileLoading, isOnboarded, isAuthenticated, router]);
 
-  if (status === 'loading' || profileLoading || entriesLoading || !isOnboarded) {
+  if (!mounted || status === 'loading' || profileLoading || entriesLoading || !isOnboarded) {
     return <DashboardSkeleton />;
   }
 
@@ -110,9 +114,6 @@ export default function Dashboard() {
 
         {/* Weekly Deficit Chart */}
         <WeeklyDeficitChart baseCalorieGoal={calorieGoal} />
-
-        {/* Leaner alternatives based on today's heavier items */}
-        <AlternativesCard />
 
         {/* Water Tracker */}
         <WaterTracker goalMl={profile?.dailyWaterGoalMl || 2000} />

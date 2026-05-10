@@ -134,9 +134,9 @@ function localDate(d: Date): string {
         `INSERT INTO food_entries (
            user_id, name, meal_type, date, consumed_at,
            calories, protein, carbs, fat,
-           is_manual_entry, status, source
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-        [user.id, c.item.name, c.slot, dateStr, consumedAt.toISOString(), kcal, protein, carbs, fat, false, 'resolved', 'analyze-text']
+           is_manual_entry, status, source, notes
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        [user.id, c.item.name, c.slot, dateStr, consumedAt.toISOString(), kcal, protein, carbs, fat, false, 'resolved', 'analyze-text', '__backfill__']
       );
       inserted++;
     }

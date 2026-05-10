@@ -9,6 +9,7 @@ import Card from '@/components/ui/Card';
 import HealthSync from '@/components/profile/HealthSync';
 import HealthImport from '@/components/profile/HealthImport';
 import QuickBackfill from '@/components/profile/QuickBackfill';
+import StravaConnect from '@/components/profile/StravaConnect';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
@@ -94,6 +95,9 @@ export default function Profile() {
       </header>
 
       <div className="px-4 py-4 space-y-4 page-transition">
+        {/* Strava (Garmin runs) — primary source for running calories */}
+        <StravaConnect />
+
         {/* One-off backfill via Apple Health Export ZIP (the easiest free path) */}
         <HealthImport />
 

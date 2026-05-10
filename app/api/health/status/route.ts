@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { listHealthTokens, getDailyActivity } from '@/lib/db';
+import {
+  listHealthTokens,
+  getDailyActivity,
+  getStravaKcalForDate,
+  getStravaAccount,
+} from '@/lib/db';
 
-// Combined status for the dashboard tile + profile UI:
-//   - whether the user has connected Apple Health (any token exists + has been used)
-//   - today's daily_activity row (most recent ingest)
+// Combined activity status used by the dashboard tile + BurnedCaloriesTile.
+// Sources of "calories burned today":
+//   - apple_health.totalKcal: basal + walking/incidental from iPhone
+//   - strava.todayKcal: running/cycling kcal from Garmin via Strava
+//
+// We return BOTH separately AND a combined field, so callers can choose.
 
 export async function GET(_request: NextRequest) {
   const session = await auth();
@@ -14,13 +22,30 @@ export async function GET(_request: NextRequest) {
   const userId = session.user.id;
   const todayLocal = new Date().toISOString().slice(0, 10);
 
-  const [tokens, today] = await Promise.all([
+  const [tokens, today, stravaKcal, stravaAcct] = await Promise.all([
     listHealthTokens(userId),
     getDailyActivity(userId, todayLocal),
+    getStravaKcalForDate(userId, todayLocal),
+    getStravaAccount(userId),
   ]);
 
-  // "Connected" = has at least one token that has actually received data.
-  const connected = tokens.some((t) => !!t.lastUsedAt);
+  const appleConnected = tokens.some((t) => !!t.lastUsedAt);
+  const stravaConnected = !!stravaAcct;
 
-  return NextResponse.json({ connected, today });
+  const appleActive = today?.activeKcal ?? null;
+  const appleTotal = today?.totalKcal ?? null;
+  const combinedActive = (appleActive ?? 0) + stravaKcal;
+  const combinedTotal = appleTotal != null ? appleTotal + stravaKcal : null;
+
+  return NextResponse.json({
+    connected: appleConnected || stravaConnected,
+    appleConnected,
+    stravaConnected,
+    today,
+    stravaKcal,
+    combined: {
+      activeKcal: combinedActive,
+      totalKcal: combinedTotal,
+    },
+  });
 }

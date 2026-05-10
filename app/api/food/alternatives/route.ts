@@ -82,7 +82,7 @@ async function fetchAiAlternatives(
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: 'gpt-5.2',
+        model: 'gpt-5.5',
         temperature: 0.2,
         messages: [
           { role: 'system', content: 'You suggest leaner, realistic food swaps. Output JSON.' },

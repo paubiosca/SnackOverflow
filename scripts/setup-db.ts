@@ -12,13 +12,19 @@ async function setupDatabase() {
   console.log('Setting up database...');
 
   const schemaPath = path.join(__dirname, '../lib/db/schema.sql');
-  const schema = fs.readFileSync(schemaPath, 'utf-8');
+  const rawSchema = fs.readFileSync(schemaPath, 'utf-8');
 
-  // Split by semicolon and execute each statement
+  // Strip line comments before splitting on `;` — otherwise a `;` inside a
+  // comment fragments the SQL into bogus partial statements.
+  const schema = rawSchema
+    .split('\n')
+    .map((line) => line.replace(/--.*$/, ''))
+    .join('\n');
+
   const statements = schema
     .split(';')
-    .map(s => s.trim())
-    .filter(s => s.length > 0);
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 
   for (const statement of statements) {
     try {

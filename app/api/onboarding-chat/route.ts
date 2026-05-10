@@ -221,7 +221,7 @@ export async function POST(request: NextRequest) {
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'gpt-5.5',
         messages: messages.map(m => ({ role: m.role, content: m.content })),
         response_format: {
           type: 'json_schema',
@@ -328,7 +328,7 @@ export async function GET(request: NextRequest) {
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'gpt-5.5',
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: 'Current topic: greeting\nAlready collected data: {}\n\nGenerate a warm, friendly greeting to start the onboarding conversation. Ask for the user\'s name.' },

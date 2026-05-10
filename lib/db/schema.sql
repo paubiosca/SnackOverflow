@@ -120,6 +120,12 @@ CREATE TABLE IF NOT EXISTS pantry_items (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Pantry: where each item's nutrition came from. 'off' = Open Food Facts hit,
+-- 'web' = GPT-5.5 with web browsing, 'estimate' = pure LLM guess (low confidence),
+-- 'manual' = user typed. NULL allowed for legacy rows.
+ALTER TABLE pantry_items ADD COLUMN IF NOT EXISTS nutrition_source VARCHAR(16);
+ALTER TABLE pantry_items ADD COLUMN IF NOT EXISTS nutrition_confidence VARCHAR(16);
+
 -- Async logging + pantry-link columns on food_entries (idempotent additions)
 ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS consumed_at TIMESTAMP WITH TIME ZONE;
 ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS status VARCHAR(24) NOT NULL DEFAULT 'resolved'
@@ -170,6 +176,43 @@ CREATE TABLE IF NOT EXISTS health_tokens (
 );
 
 CREATE INDEX IF NOT EXISTS idx_health_tokens_token ON health_tokens(token);
+
+-- Strava OAuth account. One per Strava connection (user_id by athlete_id).
+-- Tokens refresh, so we store both the access token and the refresh token
+-- plus expiry, allowing a request to transparently rotate.
+CREATE TABLE IF NOT EXISTS strava_accounts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  athlete_id BIGINT UNIQUE NOT NULL,
+  access_token TEXT NOT NULL,
+  refresh_token TEXT NOT NULL,
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  scope TEXT,
+  connected_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_strava_accounts_athlete ON strava_accounts(athlete_id);
+
+-- Per-activity records pulled from Strava. We keep raw payload too so future
+-- features (heart rate, splits, GPS) can be derived without re-fetching.
+CREATE TABLE IF NOT EXISTS strava_activities (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  strava_activity_id BIGINT NOT NULL,
+  activity_type VARCHAR(64) NOT NULL,
+  name VARCHAR(255),
+  start_date TIMESTAMP WITH TIME ZONE NOT NULL,
+  date DATE NOT NULL,
+  moving_time_sec INTEGER,
+  distance_m INTEGER,
+  kcal INTEGER,
+  raw JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, strava_activity_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_strava_activities_user_date ON strava_activities(user_id, date);
 
 CREATE TABLE IF NOT EXISTS daily_activity (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

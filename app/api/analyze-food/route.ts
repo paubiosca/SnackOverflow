@@ -172,7 +172,7 @@ Please update your estimates based on these answers and don't ask these question
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-5.2',
+        model: 'gpt-5.5',
         messages: [
           { role: 'system', content: systemPrompt },
           {
