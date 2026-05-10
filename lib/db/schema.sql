@@ -143,6 +143,12 @@ ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS pantry_item_id UUID REFERENCES
 ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS input_description TEXT;
 ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS additional_context TEXT;
 
+-- Calibrated baseline TDEE in kcal/day. Represents the user's typical daily
+-- burn EXCLUDING tracked workouts (so just BMR + walking + incidental movement).
+-- When set, the smart-goal endpoint uses (baseline + today_strava_kcal - deficit)
+-- as the daily eating target instead of the textbook Mifflin formula.
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS tdee_baseline_kcal INTEGER;
+
 -- Allow nullable nutrition while a row is pending (resolved rows still must have values, enforced in app code).
 ALTER TABLE food_entries ALTER COLUMN calories DROP NOT NULL;
 ALTER TABLE food_entries ALTER COLUMN protein DROP NOT NULL;

@@ -10,8 +10,10 @@ import Button from '@/components/ui/Button';
 import SuggestionsRail from '@/components/food/SuggestionsRail';
 import ProcessingTray from '@/components/food/ProcessingTray';
 import ClarifyCard from '@/components/food/ClarifyCard';
-import { AlertTriangle, ChevronLeft, ChevronRight, Calendar, Camera, Image as ImageIcon, X, Check, Receipt } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import ReceiptCapture from '@/components/pantry/ReceiptCapture';
+import ReceiptReview, { ReviewItem } from '@/components/pantry/ReceiptReview';
+import { AlertTriangle, ChevronLeft, ChevronRight, Calendar, Camera, Image as ImageIcon, X, Check, Receipt, Loader2 } from 'lucide-react';
+import type { BulkPantryInput } from '@/lib/db';
 
 // Sentinel stored in `notes` to mark a "Just curious" entry. The DB schema
 // has no status enum value for this, so the notes field doubles as the marker.
@@ -44,8 +46,9 @@ const suggestMealType = (): MealType => {
 
 type Intent = 'eating' | 'curious';
 
+type ReceiptStage = 'idle' | 'capture' | 'parsing' | 'review';
+
 export default function AddFood() {
-  const router = useRouter();
   const { profile } = useProfile();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const { entries, logAsync, add, remove, update, answerClarification } = useFoodEntries(getDateString(selectedDate));
@@ -56,6 +59,20 @@ export default function AddFood() {
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const [intent, setIntent] = useState<Intent>('eating');
   const [confirmation, setConfirmation] = useState<string | null>(null);
+  // Tracks quick-added entries (suggestion chip taps) so the user can spot a
+  // mistake and remove it without hunting through the day's full list.
+  // Persists for the lifetime of this page view; clears on date change.
+  const [recentlyAdded, setRecentlyAdded] = useState<Array<{ id: string; name: string; calories: number }>>([]);
+
+  useEffect(() => {
+    setRecentlyAdded([]);
+  }, [selectedDate]);
+
+  // Receipt-scan state lives inside this page so the entire flow stays in /add-food.
+  const [receiptStage, setReceiptStage] = useState<ReceiptStage>('idle');
+  const [receiptItems, setReceiptItems] = useState<ReviewItem[]>([]);
+  const [receiptStore, setReceiptStore] = useState<string | null>(null);
+  const [receiptDate, setReceiptDate] = useState<string | null>(null);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -141,7 +158,7 @@ export default function AddFood() {
   // One-tap log from a suggestion chip — full nutrition is already known, so this
   // is a synchronous insert (no LLM call). Fastest path in the app.
   const handlePickSuggestion = async (s: FoodSuggestion) => {
-    await add({
+    const created = await add({
       name: s.name,
       mealType: s.mealType,
       calories: s.calories,
@@ -151,7 +168,18 @@ export default function AddFood() {
       isManualEntry: false,
       date: getDateString(selectedDate),
     });
+    if (created?.id) {
+      setRecentlyAdded((prev) => [
+        { id: created.id, name: s.name, calories: s.calories },
+        ...prev.filter((r) => r.id !== created.id),
+      ]);
+    }
     flashConfirmation(`Added ${s.name}`);
+  };
+
+  const handleUndoQuickAdd = async (id: string) => {
+    setRecentlyAdded((prev) => prev.filter((r) => r.id !== id));
+    await remove(id);
   };
 
   const canSubmit = (description.trim().length > 0 || photoDataUrl !== null);
@@ -177,6 +205,61 @@ export default function AddFood() {
     setDescription('');
     setPhotoDataUrl(null);
     flashConfirmation(intent === 'curious' ? 'Saved for review' : 'Added — processing…');
+  };
+
+  // Receipt scan flow ----------------------------------------------------------
+  const handleReceiptCapture = async (dataUrl: string) => {
+    setReceiptStage('parsing');
+    setError(null);
+    try {
+      const r = await fetch('/api/pantry/import-receipt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ photoDataUrl: dataUrl }),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        throw new Error(e?.error ?? `Scan failed: ${r.status}`);
+      }
+      const { items, store, purchasedAt } = await r.json();
+      setReceiptItems(items);
+      setReceiptStore(store);
+      setReceiptDate(purchasedAt);
+      setReceiptStage('review');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Scan failed');
+      setReceiptStage('capture');
+    }
+  };
+
+  const handleReceiptConfirm = async (items: ReviewItem[]) => {
+    const payload: BulkPantryInput[] = items.map((it) => ({
+      rawText: it.rawText,
+      normalizedName: it.normalizedName,
+      qtyTotal: it.qty,
+      unit: it.unit,
+      estCaloriesPerUnit: it.kcal,
+      estProteinPerUnit: it.protein,
+      estCarbsPerUnit: it.carbs,
+      estFatPerUnit: it.fat,
+      store: it.store,
+      source: 'receipt',
+      purchasedAt: receiptDate,
+      nutritionSource: it.nutritionSource,
+      nutritionConfidence: it.nutritionConfidence,
+    }));
+    const r = await fetch('/api/pantry/items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: payload }),
+    });
+    if (r.ok) {
+      flashConfirmation(`Added ${items.length} pantry items`);
+      setReceiptItems([]);
+      setReceiptStage('idle');
+    } else {
+      setError('Failed to save items');
+    }
   };
 
   return (
@@ -229,6 +312,94 @@ export default function AddFood() {
         )}
 
         <SuggestionsRail mealType={selectedMealType} onPick={handlePickSuggestion} />
+
+        {recentlyAdded.length > 0 && (
+          <Card className="bg-green-50/60 border border-green-200">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-text-primary">Just added</h3>
+              <button
+                onClick={() => setRecentlyAdded([])}
+                className="text-xs text-text-secondary hover:text-text-primary"
+              >
+                Clear
+              </button>
+            </div>
+            <ul className="space-y-1.5">
+              {recentlyAdded.map((r) => (
+                <li
+                  key={r.id}
+                  className="flex items-center gap-2 px-3 py-2 bg-white rounded-apple border border-green-100"
+                >
+                  <Check className="w-4 h-4 text-accent-green shrink-0" />
+                  <span className="flex-1 min-w-0 text-sm text-text-primary truncate">{r.name}</span>
+                  <span className="text-xs text-text-secondary shrink-0">{r.calories} kcal</span>
+                  <button
+                    onClick={() => handleUndoQuickAdd(r.id)}
+                    className="ml-1 p-1.5 rounded-full text-accent-red hover:bg-red-50 active:bg-red-100 touch-manipulation"
+                    aria-label={`Remove ${r.name}`}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[11px] text-text-secondary mt-2">
+              Tap × to undo. This list clears when you change the day.
+            </p>
+          </Card>
+        )}
+
+        {/* Receipt scan — entire flow stays inside /add-food. */}
+        {receiptStage === 'idle' && (
+          <button
+            onClick={() => { setError(null); setReceiptStage('capture'); }}
+            className="w-full p-3 bg-white rounded-apple-lg shadow-apple active:bg-secondary-bg flex items-center gap-3 touch-manipulation"
+          >
+            <div className="w-10 h-10 rounded-full bg-accent-green/10 flex items-center justify-center shrink-0">
+              <Receipt className="w-5 h-5 text-accent-green" />
+            </div>
+            <div className="text-left flex-1 min-w-0">
+              <h3 className="font-semibold text-text-primary text-sm">Scan a receipt</h3>
+              <p className="text-xs text-text-secondary">Adds items to your pantry, then they show up here as quick chips.</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-text-secondary shrink-0" />
+          </button>
+        )}
+
+        {receiptStage === 'capture' && (
+          <Card>
+            <h2 className="font-semibold text-text-primary mb-1">Scan a receipt</h2>
+            <p className="text-xs text-text-secondary mb-3">Lay it flat under good light. Vertical orientation works best.</p>
+            <ReceiptCapture
+              onCapture={handleReceiptCapture}
+              onCancel={() => setReceiptStage('idle')}
+            />
+          </Card>
+        )}
+
+        {receiptStage === 'parsing' && (
+          <Card>
+            <div className="flex flex-col items-center py-8">
+              <Loader2 className="w-8 h-8 text-accent-blue animate-spin mb-3" />
+              <h3 className="font-semibold text-text-primary">Reading receipt…</h3>
+              <p className="text-xs text-text-secondary mt-1 text-center max-w-xs">
+                Extracting items, looking up nutrition on Open Food Facts, and falling back to web search for anything missing. Takes ~10-30s.
+              </p>
+            </div>
+          </Card>
+        )}
+
+        {receiptStage === 'review' && (
+          <Card>
+            <ReceiptReview
+              initial={receiptItems}
+              store={receiptStore}
+              purchasedAt={receiptDate}
+              onConfirm={handleReceiptConfirm}
+              onCancel={() => { setReceiptItems([]); setReceiptStage('idle'); }}
+            />
+          </Card>
+        )}
 
         <Card>
           {/* Meal type selector */}

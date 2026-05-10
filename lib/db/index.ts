@@ -68,6 +68,7 @@ export async function getProfile(userId: string): Promise<UserProfile | null> {
       goal_value as "goalValue",
       daily_water_goal_ml as "dailyWaterGoalMl",
       COALESCE(active_calorie_goal, 450) as "activeCalorieGoal",
+      tdee_baseline_kcal as "tdeeBaselineKcal",
       openai_api_key as "openaiApiKey",
       created_at as "createdAt"
     FROM profiles
@@ -90,6 +91,7 @@ export async function getProfile(userId: string): Promise<UserProfile | null> {
     goalValue: Number(row.goalValue),
     dailyWaterGoalMl: Number(row.dailyWaterGoalMl),
     activeCalorieGoal: Number(row.activeCalorieGoal),
+    tdeeBaselineKcal: row.tdeeBaselineKcal != null ? Number(row.tdeeBaselineKcal) : undefined,
     openaiApiKey: row.openaiApiKey,
     createdAt: row.createdAt,
   };

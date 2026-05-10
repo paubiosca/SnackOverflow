@@ -184,27 +184,6 @@ export default function Profile() {
           </button>
         </Card>
 
-        {/* Pantry — receipt scanning */}
-        <Card>
-          <button
-            onClick={() => router.push('/pantry')}
-            className="w-full flex items-center justify-between"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-accent-green/10 rounded-full flex items-center justify-center">
-                <ShoppingBasket className="w-5 h-5 text-accent-green" />
-              </div>
-              <div className="text-left">
-                <h3 className="font-semibold text-text-primary">Pantry</h3>
-                <p className="text-sm text-text-secondary">
-                  Scan a receipt to fill your fridge
-                </p>
-              </div>
-            </div>
-            <ChevronRight className="w-5 h-5 text-text-secondary" />
-          </button>
-        </Card>
-
         {/* Activity Approach */}
         <Card>
           <div className="flex items-center justify-between mb-4">

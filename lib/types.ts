@@ -17,6 +17,10 @@ export interface UserProfile {
   goalValue: number | null; // negative calories for deficit_fixed, kg/week for weight_loss_rate
   dailyWaterGoalMl: number;
   activeCalorieGoal: number; // Daily active calorie goal (e.g., 450 from Apple Watch)
+  // Calibrated baseline TDEE in kcal/day. Set once from a real-data source
+  // (e.g. Apple Health 90-day average excluding tracked workouts). When set,
+  // overrides the formula-based goal calculation.
+  tdeeBaselineKcal?: number;
   createdAt: string;
   openaiApiKey?: string; // OpenAI API key (stored in database)
 }

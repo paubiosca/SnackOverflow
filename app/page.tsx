@@ -18,6 +18,7 @@ import WeeklyDeficitChart from '@/components/dashboard/WeeklyDeficitChart';
 import EditFoodModal from '@/components/food/EditFoodModal';
 import ClarifySheet from '@/components/food/ClarifySheet';
 import BurnedCaloriesTile from '@/components/dashboard/BurnedCaloriesTile';
+import SmartGoalCard from '@/components/dashboard/SmartGoalCard';
 import DashboardSkeleton from '@/components/dashboard/DashboardSkeleton';
 import CalibrationCard from '@/components/dashboard/CalibrationCard';
 
@@ -105,6 +106,9 @@ export default function Dashboard() {
           />
           <MealBreakdown entries={entries} />
         </Card>
+
+        {/* Smart daily target: calibrated baseline + today's Strava run - deficit */}
+        <SmartGoalCard consumedKcal={totals.calories} />
 
         {/* Burned calories from Apple Health (hidden until first ingest) */}
         <BurnedCaloriesTile consumedKcal={totals.calories} />

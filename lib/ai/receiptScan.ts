@@ -146,15 +146,27 @@ export async function lookupNutritionWithBrowsing(
     `Do not include any commentary or markdown — JSON only.`,
   ].join('\n');
 
-  const res = await fetch(`${OPENAI}/v1/responses`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: 'gpt-5.5',
-      tools: [{ type: 'web_search' }],
-      input: prompt,
-    }),
-  });
+  // Hard 18s timeout. A few items in our test took >100s — far slower than any
+  // user is willing to wait. We'd rather fall through to estimate than hang.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 18000);
+  let res: Response;
+  try {
+    res = await fetch(`${OPENAI}/v1/responses`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'gpt-5.5',
+        tools: [{ type: 'web_search' }],
+        input: prompt,
+      }),
+      signal: ctrl.signal,
+    });
+  } catch {
+    clearTimeout(timer);
+    return null;
+  }
+  clearTimeout(timer);
   if (!res.ok) return null;
   const data = await res.json();
   // Responses API: pull the final assistant text out of `output_text` if
