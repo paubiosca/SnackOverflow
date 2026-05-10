@@ -139,6 +139,30 @@ export function useFoodEntries(date?: string) {
     }
   }, [targetDate]);
 
+  // Append a free-text refinement (e.g. "only ate half this box"), flip the
+  // row back to pending, and re-trigger the worker. The photo and original
+  // description are preserved server-side, so the AI re-analyzes the same
+  // image with the extra hints layered on top.
+  const refine = useCallback(async (id: string, additionalContext: string) => {
+    try {
+      const res = await fetch(`/api/food/${id}/refine`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ additionalContext }),
+      });
+      if (!res.ok) return null;
+      const { entry: updated } = await res.json();
+      setEntries((prev) => prev.map((e) => (e.id === id ? updated : e)));
+      fetch(`/api/food/${id}/process`, { method: 'POST' }).catch((err) =>
+        console.error('[useFoodEntries] worker dispatch failed', err)
+      );
+      return updated as FoodEntry;
+    } catch (e) {
+      console.error('Error refining entry:', e);
+      return null;
+    }
+  }, []);
+
   // Submit an answer to a clarifying question. Moves the row back to pending
   // and triggers the worker to re-analyze.
   const answerClarification = useCallback(async (id: string, answer: string) => {
@@ -203,6 +227,7 @@ export function useFoodEntries(date?: string) {
     add,
     logAsync,
     answerClarification,
+    refine,
     update,
     remove,
     getEntriesByMeal,

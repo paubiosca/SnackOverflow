@@ -13,6 +13,8 @@ import ClarifyCard from '@/components/food/ClarifyCard';
 import ReceiptCapture from '@/components/pantry/ReceiptCapture';
 import ReceiptReview, { ReviewItem } from '@/components/pantry/ReceiptReview';
 import PortionSheet, { ScaledPortion } from '@/components/food/PortionSheet';
+import RefineSheet from '@/components/food/RefineSheet';
+import type { FoodEntry } from '@/lib/types';
 import { AlertTriangle, ChevronLeft, ChevronRight, Calendar, Camera, Image as ImageIcon, X, Check, Receipt, Loader2 } from 'lucide-react';
 import type { BulkPantryInput } from '@/lib/db';
 
@@ -52,7 +54,7 @@ type ReceiptStage = 'idle' | 'capture' | 'parsing' | 'review';
 export default function AddFood() {
   const { profile } = useProfile();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const { entries, logAsync, add, remove, update, answerClarification } = useFoodEntries(getDateString(selectedDate));
+  const { entries, logAsync, add, remove, update, answerClarification, refine } = useFoodEntries(getDateString(selectedDate));
 
   const [error, setError] = useState<string | null>(null);
   const [selectedMealType, setSelectedMealType] = useState<MealType>(suggestMealType());
