@@ -26,11 +26,13 @@ interface MealBreakdownProps {
 export default function MealBreakdown({ entries }: MealBreakdownProps) {
   const mealData = useMemo(() => {
     const mealTypes: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
-    const totalCalories = entries.reduce((sum, e) => sum + e.calories, 0);
+    // Math.round each meal sum to drop float-precision artefacts (Postgres
+    // DECIMAL → JS float adds noise like 1339.9000000000003 when summed).
+    const totalCalories = Math.round(entries.reduce((sum, e) => sum + e.calories, 0));
 
     return mealTypes.map((type) => {
       const mealEntries = entries.filter((e) => e.mealType === type);
-      const calories = mealEntries.reduce((sum, e) => sum + e.calories, 0);
+      const calories = Math.round(mealEntries.reduce((sum, e) => sum + e.calories, 0));
       const percentage = totalCalories > 0 ? Math.round((calories / totalCalories) * 100) : 0;
 
       return {
@@ -44,7 +46,7 @@ export default function MealBreakdown({ entries }: MealBreakdownProps) {
     });
   }, [entries]);
 
-  const totalCalories = entries.reduce((sum, e) => sum + e.calories, 0);
+  const totalCalories = Math.round(entries.reduce((sum, e) => sum + e.calories, 0));
 
   if (totalCalories === 0) {
     return null;

@@ -177,10 +177,11 @@ export function calculateDailyTotals(entries: FoodEntry[]): {
 } {
   // Skip rows that have no nutrition yet (pure pending) or failed.
   // 'needs_clarification' rows still count if a preliminary estimate is present.
-  return entries.reduce(
+  // Round at the boundary: Postgres DECIMAL columns coerce to JS floats and
+  // summing them produces things like 1339.9000000000003 — which then renders
+  // directly in the UI. One rounding here cleans up every consumer.
+  const raw = entries.reduce(
     (totals, entry) => {
-      // Skip rows that have no nutrition yet (pending) or failed.
-      // 'needs_clarification' rows still count if a preliminary estimate is present.
       const status = entry.status ?? 'resolved';
       if (status === 'failed' || status === 'pending') return totals;
       return {
@@ -192,6 +193,12 @@ export function calculateDailyTotals(entries: FoodEntry[]): {
     },
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   );
+  return {
+    calories: Math.round(raw.calories),
+    protein: Math.round(raw.protein * 10) / 10,
+    carbs: Math.round(raw.carbs * 10) / 10,
+    fat: Math.round(raw.fat * 10) / 10,
+  };
 }
 
 /**

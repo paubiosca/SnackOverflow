@@ -77,6 +77,22 @@ export default function WeekStats({ days, targetDeficit }: Props) {
           {streak} {streak === 1 ? 'day' : 'days'} under goal
         </span>
       </div>
+
+      {/* 30-day weight projection from the 7-day moving avg deficit.
+          7700 kcal ≈ 1 kg fat. Positive avg = under target = losing weight. */}
+      {logged.length >= 3 && (() => {
+        const projectedKg = (avg * 30) / 7700; // positive = loss, negative = gain
+        const sign = projectedKg > 0 ? '−' : projectedKg < 0 ? '+' : '';
+        const tone = projectedKg > 0 ? 'text-accent-green' : projectedKg < 0 ? 'text-accent-red' : 'text-text-primary';
+        return (
+          <div className="rounded-apple bg-secondary-bg px-3 py-2 flex items-center justify-between">
+            <span className="text-sm text-text-secondary">Projected (1 month)</span>
+            <span className={`text-sm font-semibold ${tone}`}>
+              {sign}{Math.abs(projectedKg).toFixed(1)} kg
+            </span>
+          </div>
+        );
+      })()}
     </div>
   );
 }
