@@ -125,6 +125,10 @@ CREATE TABLE IF NOT EXISTS pantry_items (
 -- 'manual' = user typed. NULL allowed for legacy rows.
 ALTER TABLE pantry_items ADD COLUMN IF NOT EXISTS nutrition_source VARCHAR(16);
 ALTER TABLE pantry_items ADD COLUMN IF NOT EXISTS nutrition_confidence VARCHAR(16);
+-- Source URL the AI cited (or OFF product page) so the receipts view can link
+-- back to the original product page. Stored as TEXT (URLs can be long).
+ALTER TABLE pantry_items ADD COLUMN IF NOT EXISTS nutrition_citation TEXT;
+ALTER TABLE pantry_items ADD COLUMN IF NOT EXISTS product_image_url TEXT;
 
 -- Async logging + pantry-link columns on food_entries (idempotent additions)
 ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS consumed_at TIMESTAMP WITH TIME ZONE;

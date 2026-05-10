@@ -146,10 +146,10 @@ export async function lookupNutritionWithBrowsing(
     `Do not include any commentary or markdown — JSON only.`,
   ].join('\n');
 
-  // Hard 18s timeout. A few items in our test took >100s — far slower than any
-  // user is willing to wait. We'd rather fall through to estimate than hang.
+  // Hard 22s timeout. Some items in testing took 100+s; we'd rather fall
+  // through to estimate than hang the whole pipeline on one slow query.
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 18000);
+  const timer = setTimeout(() => ctrl.abort(), 22000);
   let res: Response;
   try {
     res = await fetch(`${OPENAI}/v1/responses`, {

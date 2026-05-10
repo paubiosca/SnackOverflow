@@ -44,6 +44,7 @@ interface ActivityRow {
   activeKcal: number | null;
   bmrKcal: number | null;
   totalKcal: number | null;
+  stravaKcal?: number;
 }
 
 export default function History() {
@@ -98,29 +99,42 @@ export default function History() {
     return () => { cancelled = true; };
   }, [session, window]);
 
+  // Per-day target uses the SAME formula as today's dashboard:
+  //   target = (apple_health_total_today OR calibrated baseline) + strava_today − deficit
+  // So the history view stays consistent with what the user saw on each day.
+  const baseline = profile?.tdeeBaselineKcal ?? calorieGoal + targetDeficit;
   const days: DayPoint[] = useMemo(() => {
     return window.map((date) => {
       const entries = entriesByDate[date] || [];
       const totals = calculateDailyTotals(entries);
-      const burned = activityByDate[date]?.activeKcal ?? 0;
-      // Each day's eating goal = base goal + active calories burned that day.
-      // Burn raises the budget you can eat without breaking your planned deficit.
+      const act = activityByDate[date];
+      const stravaKcal = act?.stravaKcal ?? 0;
+      // Prefer same-day measured Apple Health total when present (it already
+      // includes basal + walking for that specific day). Fall back to the
+      // user's calibrated baseline. Add Strava run kcal on top.
+      const nonRunningBurn = act?.totalKcal ?? baseline;
+      const dailyTdee = nonRunningBurn + stravaKcal;
+      const dailyTarget = Math.max(1200, dailyTdee - targetDeficit);
       return {
         date,
         consumed: totals.calories,
-        goal: calorieGoal + (burned ?? 0),
+        goal: dailyTarget,
         hasData: entries.length > 0,
       };
     });
-  }, [window, entriesByDate, activityByDate, calorieGoal]);
+  }, [window, entriesByDate, activityByDate, baseline, targetDeficit]);
 
   const last7 = useMemo(() => days.slice(-Math.min(7, days.length)), [days]);
 
   const selectedEntries = selectedDate ? entriesByDate[selectedDate] || [] : [];
   const selectedTotals = calculateDailyTotals(selectedEntries);
   const selectedActivity = selectedDate ? activityByDate[selectedDate] : null;
-  const selectedBurned = selectedActivity?.activeKcal ?? 0;
-  const selectedAdjustedGoal = calorieGoal + selectedBurned;
+  const selectedStravaKcal = selectedActivity?.stravaKcal ?? 0;
+  // Same target formula as the dashboard: baseline (or measured Apple Health
+  // for that day) + Strava run + applied deficit.
+  const selectedNonRunningBurn = selectedActivity?.totalKcal ?? baseline;
+  const selectedTdee = selectedNonRunningBurn + selectedStravaKcal;
+  const selectedAdjustedGoal = Math.max(1200, selectedTdee - targetDeficit);
   const selectedDelta = selectedAdjustedGoal - selectedTotals.calories;
 
   const selectedByMeal = useMemo(() => {
@@ -198,7 +212,7 @@ export default function History() {
                   icon={<Target className="w-3.5 h-3.5 text-accent-blue" />}
                   label="Goal"
                   value={selectedAdjustedGoal}
-                  sub={selectedBurned > 0 ? `${calorieGoal} + ${selectedBurned}` : undefined}
+                  sub={selectedStravaKcal > 0 ? `${selectedNonRunningBurn} + ${selectedStravaKcal} run` : undefined}
                   tone="text-accent-blue"
                 />
                 <Stat
@@ -210,8 +224,8 @@ export default function History() {
                 <Stat
                   icon={<Flame className="w-3.5 h-3.5 text-accent-orange" />}
                   label="Burned"
-                  value={selectedBurned}
-                  sub={selectedBurned === 0 ? 'no data' : undefined}
+                  value={selectedTdee}
+                  sub={selectedStravaKcal > 0 ? `${selectedNonRunningBurn} + ${selectedStravaKcal} run` : 'no run'}
                   tone="text-accent-orange"
                 />
               </div>

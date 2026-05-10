@@ -14,11 +14,8 @@ import MealBreakdown from '@/components/dashboard/MealBreakdown';
 import MealSection from '@/components/dashboard/MealSection';
 import WaterTracker from '@/components/dashboard/WaterTracker';
 import WeightTracker from '@/components/dashboard/WeightTracker';
-import WeeklyDeficitChart from '@/components/dashboard/WeeklyDeficitChart';
 import EditFoodModal from '@/components/food/EditFoodModal';
 import ClarifySheet from '@/components/food/ClarifySheet';
-import BurnedCaloriesTile from '@/components/dashboard/BurnedCaloriesTile';
-import SmartGoalCard from '@/components/dashboard/SmartGoalCard';
 import DashboardSkeleton from '@/components/dashboard/DashboardSkeleton';
 import CalibrationCard from '@/components/dashboard/CalibrationCard';
 
@@ -29,30 +26,10 @@ export default function Dashboard() {
   const { entries, totals, getEntriesByMeal, remove, update, answerClarification, isLoading: entriesLoading } = useFoodEntries();
   const [editingEntry, setEditingEntry] = useState<FoodEntry | null>(null);
   const [clarifyingEntry, setClarifyingEntry] = useState<FoodEntry | null>(null);
-  // Active calories now come from Apple Health (auto-synced via the iOS Shortcut)
-  // instead of manual entry. 0 if no Health data has been ingested yet.
-  const [activeCaloriesBurned, setActiveCaloriesBurned] = useState(0);
   // Hydration guard. Server and first client render BOTH return the skeleton;
-  // we only switch to real content after mount. Avoids any hydration mismatch
-  // from session state, locale-dependent date formatting, or async hooks.
+  // we only switch to real content after mount.
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
-
-  useEffect(() => {
-    fetch('/api/health/status')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (!data) return;
-        // Combined active kcal = Apple Health (walking/incidental) + Strava
-        // (Garmin runs). The server computes this; trust it.
-        const combined = data.combined?.activeKcal ?? 0;
-        setActiveCaloriesBurned(Math.max(0, combined));
-      })
-      .catch(() => {});
-  }, []);
-
-  // Dynamic-approach users get their active burn added to today's eating budget.
-  const adjustedCalorieGoal = calorieGoal + activeCaloriesBurned;
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -91,14 +68,9 @@ export default function Dashboard() {
       </header>
 
       <div className="px-4 py-4 space-y-4 page-transition">
-        {/* Calorie Summary */}
+        {/* Single source of truth: eaten · usual burn · + today's run · target · deficit */}
         <Card>
-          <CalorieSummary
-            consumed={totals.calories}
-            goal={adjustedCalorieGoal}
-            baseGoal={calorieGoal}
-            activeBonus={activeCaloriesBurned}
-          />
+          <CalorieSummary consumed={totals.calories} />
           <MacroBreakdown
             protein={{ current: totals.protein, goal: macroTargets.protein }}
             carbs={{ current: totals.carbs, goal: macroTargets.carbs }}
@@ -107,17 +79,8 @@ export default function Dashboard() {
           <MealBreakdown entries={entries} />
         </Card>
 
-        {/* Smart daily target: calibrated baseline + today's Strava run - deficit */}
-        <SmartGoalCard consumedKcal={totals.calories} />
-
-        {/* Burned calories from Apple Health (hidden until first ingest) */}
-        <BurnedCaloriesTile consumedKcal={totals.calories} />
-
-        {/* Calibration insight: expected vs actual deficit (hidden until ~2 weeks of data) */}
+        {/* Calibration insight: predicted vs actual weight delta (hidden until ~2 weeks of data) */}
         <CalibrationCard />
-
-        {/* Weekly Deficit Chart */}
-        <WeeklyDeficitChart baseCalorieGoal={calorieGoal} />
 
         {/* Water Tracker */}
         <WaterTracker goalMl={profile?.dailyWaterGoalMl || 2000} />

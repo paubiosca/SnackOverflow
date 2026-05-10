@@ -4,88 +4,38 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import BottomNav from '@/components/ui/BottomNav';
 import Card from '@/components/ui/Card';
-import ReceiptCapture from '@/components/pantry/ReceiptCapture';
-import ReceiptReview, { ReviewItem } from '@/components/pantry/ReceiptReview';
-import { Loader2, Receipt, ShoppingBasket } from 'lucide-react';
-import type { PantryItem } from '@/lib/types';
-import type { BulkPantryInput } from '@/lib/db';
+import { ChevronDown, ChevronUp, ExternalLink, Database, Sparkles, ShieldCheck, ShoppingBasket, Receipt as ReceiptIcon, AlertTriangle } from 'lucide-react';
+import type { ReceiptGroup, ReceiptItem } from '@/lib/db';
 
-type Stage = 'list' | 'capture' | 'parsing' | 'review';
+const SOURCE_BADGE: Record<string, { label: string; tone: string; icon: React.ReactNode }> = {
+  off:      { label: 'Open Food Facts', tone: 'bg-green-50 text-green-700 border-green-200',     icon: <Database className="w-3 h-3" /> },
+  web:      { label: 'Web',              tone: 'bg-blue-50 text-blue-700 border-blue-200',         icon: <Sparkles className="w-3 h-3" /> },
+  estimate: { label: 'Estimate',         tone: 'bg-amber-50 text-amber-700 border-amber-200',     icon: <ShieldCheck className="w-3 h-3" /> },
+  manual:   { label: 'Manual',           tone: 'bg-gray-50 text-text-secondary border-border-light', icon: <ShoppingBasket className="w-3 h-3" /> },
+};
 
 export default function PantryPage() {
   const { data: session } = useSession();
-  const [stage, setStage] = useState<Stage>('list');
-  const [pantry, setPantry] = useState<PantryItem[]>([]);
-  const [parsedItems, setParsedItems] = useState<ReviewItem[]>([]);
-  const [parsedStore, setParsedStore] = useState<string | null>(null);
-  const [parsedDate, setParsedDate] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [groups, setGroups] = useState<ReceiptGroup[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [openIdx, setOpenIdx] = useState<number | null>(0); // most recent open by default
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
 
-  const loadPantry = async () => {
-    const r = await fetch('/api/pantry/items');
-    if (r.ok) {
-      const { items } = await r.json();
-      setPantry(items || []);
-    }
-  };
-  useEffect(() => { if (session?.user) loadPantry(); }, [session]);
-
-  const handleScan = async (dataUrl: string) => {
-    setStage('parsing');
-    setError(null);
-    try {
-      const r = await fetch('/api/pantry/import-receipt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ photoDataUrl: dataUrl }),
-      });
-      if (!r.ok) {
-        const e = await r.json().catch(() => ({}));
-        throw new Error(e?.error ?? `Scan failed: ${r.status}`);
-      }
-      const { items, store, purchasedAt } = await r.json();
-      setParsedItems(items);
-      setParsedStore(store);
-      setParsedDate(purchasedAt);
-      setStage('review');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Scan failed');
-      setStage('capture');
-    }
-  };
-
-  const handleConfirm = async (items: ReviewItem[]) => {
-    const payload: BulkPantryInput[] = items.map((it) => ({
-      rawText: it.rawText,
-      normalizedName: it.normalizedName,
-      qtyTotal: it.qty,
-      unit: it.unit,
-      estCaloriesPerUnit: it.kcal,
-      estProteinPerUnit: it.protein,
-      estCarbsPerUnit: it.carbs,
-      estFatPerUnit: it.fat,
-      store: it.store,
-      source: 'receipt',
-      purchasedAt: parsedDate,
-      nutritionSource: it.nutritionSource,
-      nutritionConfidence: it.nutritionConfidence,
-    }));
-    const r = await fetch('/api/pantry/items', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: payload }),
-    });
-    if (r.ok) {
-      await loadPantry();
-      setParsedItems([]);
-      setStage('list');
-    } else {
-      setError('Failed to save items');
-    }
-  };
+  useEffect(() => {
+    if (!session?.user) return;
+    let cancelled = false;
+    fetch('/api/pantry/receipts')
+      .then((r) => (r.ok ? r.json() : { groups: [] }))
+      .then((data) => {
+        if (cancelled) return;
+        setGroups(data.groups || []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+    return () => { cancelled = true; };
+  }, [session]);
 
   return (
     <main className="min-h-screen pb-24">
@@ -94,101 +44,29 @@ export default function PantryPage() {
         style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
       >
         <h1 className="text-2xl font-bold text-text-primary">Pantry</h1>
+        <p className="text-xs text-text-secondary mt-0.5">Past receipts · scan a new one from the + tab</p>
       </header>
 
       <div className="px-4 py-4 space-y-4 page-transition">
-        {error && (
-          <Card className="bg-accent-red/10 border border-accent-red/30">
-            <p className="text-sm text-accent-red">{error}</p>
-          </Card>
-        )}
-
-        {stage === 'list' && (
-          <>
-            <Card>
-              <button
-                onClick={() => { setError(null); setStage('capture'); }}
-                className="w-full flex items-center justify-between p-2 active:bg-secondary-bg rounded-apple"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-accent-blue/10 flex items-center justify-center">
-                    <Receipt className="w-5 h-5 text-accent-blue" />
-                  </div>
-                  <div className="text-left">
-                    <h3 className="font-semibold text-text-primary">Scan a receipt</h3>
-                    <p className="text-xs text-text-secondary">Adds items to your pantry. Free Open Food Facts lookup + GPT-5.5 with web search.</p>
-                  </div>
-                </div>
-              </button>
-            </Card>
-
-            <Card>
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="font-semibold text-text-primary">In stock</h2>
-                <span className="text-xs text-text-secondary">{pantry.length} items</span>
-              </div>
-              {!mounted ? (
-                <PantryListSkeleton />
-              ) : pantry.length === 0 ? (
-                <div className="py-8 flex flex-col items-center text-center">
-                  <ShoppingBasket className="w-8 h-8 text-text-secondary mb-2" />
-                  <p className="text-sm text-text-secondary">Your pantry is empty.</p>
-                  <p className="text-xs text-text-secondary">Scan a receipt to populate it.</p>
-                </div>
-              ) : (
-                <ul className="divide-y divide-border-light -mx-1">
-                  {pantry.map((it) => (
-                    <li key={it.id} className="flex items-center gap-3 py-2 px-1">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-text-primary truncate">{it.normalizedName}</p>
-                        <p className="text-xs text-text-secondary">
-                          {it.qtyRemaining}× {it.unit}
-                          {it.store ? ` · ${it.store}` : ''}
-                          {typeof it.estCaloriesPerUnit === 'number'
-                            ? ` · ${Math.round(it.estCaloriesPerUnit)} kcal${it.unit === 'g' ? '/100g' : ''}`
-                            : ''}
-                        </p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Card>
-          </>
-        )}
-
-        {stage === 'capture' && (
+        {!mounted || loading ? (
+          <PantrySkeleton />
+        ) : groups.length === 0 ? (
           <Card>
-            <h2 className="font-semibold text-text-primary mb-2">Scan a receipt</h2>
-            <p className="text-xs text-text-secondary mb-3">
-              Lay it flat under good light. Vertical orientation works best.
-            </p>
-            <ReceiptCapture onCapture={handleScan} onCancel={() => setStage('list')} />
-          </Card>
-        )}
-
-        {stage === 'parsing' && (
-          <Card>
-            <div className="flex flex-col items-center py-8">
-              <Loader2 className="w-8 h-8 text-accent-blue animate-spin mb-3" />
-              <h3 className="font-semibold text-text-primary">Reading receipt…</h3>
-              <p className="text-xs text-text-secondary mt-1 text-center max-w-xs">
-                Extracting items, looking up nutrition on Open Food Facts, and falling back to web search for anything missing. Takes ~10-30 seconds.
-              </p>
+            <div className="py-8 flex flex-col items-center text-center">
+              <ReceiptIcon className="w-8 h-8 text-text-secondary mb-2" />
+              <p className="text-sm text-text-secondary">No receipts yet.</p>
+              <p className="text-xs text-text-secondary mt-1">Tap the <span className="font-semibold">+</span> tab → Scan a receipt to import one.</p>
             </div>
           </Card>
-        )}
-
-        {stage === 'review' && (
-          <Card>
-            <ReceiptReview
-              initial={parsedItems}
-              store={parsedStore}
-              purchasedAt={parsedDate}
-              onConfirm={handleConfirm}
-              onCancel={() => { setParsedItems([]); setStage('list'); }}
+        ) : (
+          groups.map((g, idx) => (
+            <ReceiptCard
+              key={`${g.store ?? '_'}-${g.purchasedAt}-${idx}`}
+              group={g}
+              isOpen={openIdx === idx}
+              onToggle={() => setOpenIdx(openIdx === idx ? null : idx)}
             />
-          </Card>
+          ))
         )}
       </div>
 
@@ -197,12 +75,111 @@ export default function PantryPage() {
   );
 }
 
-function PantryListSkeleton() {
+function ReceiptCard({ group, isOpen, onToggle }: { group: ReceiptGroup; isOpen: boolean; onToggle: () => void }) {
+  const date = new Date(group.purchasedAt);
+  const dateLabel = isFinite(date.getTime())
+    ? date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+    : 'Unknown date';
+
   return (
-    <ul className="space-y-2">
-      {[0, 1, 2, 3].map((i) => (
-        <li key={i} className="skeleton h-12 rounded-apple" />
+    <Card>
+      <button onClick={onToggle} className="w-full flex items-center justify-between text-left">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <ReceiptIcon className="w-4 h-4 text-accent-blue shrink-0" />
+            <h3 className="font-semibold text-text-primary truncate">{group.store ?? 'Receipt'}</h3>
+          </div>
+          <p className="text-xs text-text-secondary mt-0.5">
+            {dateLabel} · {group.itemCount} item{group.itemCount === 1 ? '' : 's'}
+            {group.totalKcal > 0 ? ` · ~${Math.round(group.totalKcal)} kcal total` : ''}
+          </p>
+        </div>
+        {isOpen ? <ChevronUp className="w-5 h-5 text-text-secondary" /> : <ChevronDown className="w-5 h-5 text-text-secondary" />}
+      </button>
+
+      {isOpen && (
+        <div className="mt-3 -mx-1">
+          <ul className="divide-y divide-border-light">
+            {group.items.map((it) => (
+              <ItemRow key={it.id} item={it} />
+            ))}
+          </ul>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function ItemRow({ item }: { item: ReceiptItem }) {
+  const meta = SOURCE_BADGE[item.nutritionSource ?? 'manual'] ?? SOURCE_BADGE.manual;
+  const totalKcal =
+    item.kcalPerUnit != null ? Math.round(item.kcalPerUnit * item.qty) : null;
+  const stale = item.qtyRemaining <= 0;
+  return (
+    <li className="py-2.5 px-1">
+      <div className="flex items-start gap-2.5">
+        {item.productImageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={item.productImageUrl} alt="" className="w-10 h-10 rounded-md object-cover bg-secondary-bg shrink-0" />
+        ) : (
+          <div className="w-10 h-10 rounded-md bg-secondary-bg shrink-0 flex items-center justify-center">
+            <ShoppingBasket className="w-4 h-4 text-text-secondary" />
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className={`text-sm font-medium truncate ${stale ? 'text-text-secondary line-through' : 'text-text-primary'}`}>
+              {item.normalizedName}
+            </p>
+            {totalKcal != null && (
+              <span className="text-sm font-semibold text-text-primary shrink-0">{totalKcal} kcal</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <span className="text-[11px] text-text-secondary">
+              {item.qty}× {item.unit}
+              {item.kcalPerUnit != null ? ` · ${Math.round(item.kcalPerUnit)} kcal${item.unit === 'g' ? '/100g' : item.unit === 'ml' ? '/100ml' : ''}` : ''}
+            </span>
+            <span className={`inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full border ${meta.tone}`}>
+              {meta.icon}
+              {meta.label}
+              {item.nutritionConfidence ? <span className="opacity-60">· {item.nutritionConfidence}</span> : null}
+            </span>
+            {item.nutritionCitation && (
+              <a
+                href={item.nutritionCitation}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[10px] text-accent-blue inline-flex items-center gap-0.5 truncate max-w-[160px]"
+              >
+                source <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+              </a>
+            )}
+            {item.nutritionSource === 'estimate' && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-amber-700">
+                <AlertTriangle className="w-3 h-3" />
+                low confidence
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function PantrySkeleton() {
+  return (
+    <>
+      {[0, 1].map((i) => (
+        <Card key={i}>
+          <div className="skeleton h-5 w-40 rounded-md mb-2" />
+          <div className="skeleton h-3 w-56 rounded-md" />
+          <div className="mt-3 space-y-2">
+            {[0, 1, 2].map((j) => <div key={j} className="skeleton h-12 rounded-apple" />)}
+          </div>
+        </Card>
       ))}
-    </ul>
+    </>
   );
 }

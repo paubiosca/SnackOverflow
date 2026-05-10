@@ -62,11 +62,36 @@ export default function AddFood() {
   // Tracks quick-added entries (suggestion chip taps) so the user can spot a
   // mistake and remove it without hunting through the day's full list.
   // Persists for the lifetime of this page view; clears on date change.
-  const [recentlyAdded, setRecentlyAdded] = useState<Array<{ id: string; name: string; calories: number }>>([]);
+  const [recentlyAdded, setRecentlyAdded] = useState<Array<{ id: string; name: string; calories: number; pending?: boolean; failed?: boolean }>>([]);
 
   useEffect(() => {
     setRecentlyAdded([]);
   }, [selectedDate]);
+
+  // Keep the strip in sync with entry status: a pending logAsync row gets its
+  // real name/calories once the worker resolves it, and falls into a failed
+  // state if the worker errors. We match by id so reordering doesn't matter.
+  useEffect(() => {
+    setRecentlyAdded((prev) => {
+      if (prev.length === 0) return prev;
+      let changed = false;
+      const next = prev.map((r) => {
+        const e = entries.find((x) => x.id === r.id);
+        if (!e) return r;
+        const status = e.status ?? 'resolved';
+        if (status === 'resolved' && (r.pending || r.name !== e.name || r.calories !== (e.calories ?? 0))) {
+          changed = true;
+          return { id: r.id, name: e.name || r.name, calories: e.calories ?? 0, pending: false };
+        }
+        if (status === 'failed' && !r.failed) {
+          changed = true;
+          return { ...r, failed: true, pending: false };
+        }
+        return r;
+      });
+      return changed ? next : prev;
+    });
+  }, [entries]);
 
   // Receipt-scan state lives inside this page so the entire flow stays in /add-food.
   const [receiptStage, setReceiptStage] = useState<ReceiptStage>('idle');
@@ -188,6 +213,8 @@ export default function AddFood() {
     if (!canSubmit) return;
     setError(null);
 
+    const placeholder = description.trim() || (photoDataUrl ? 'Photo entry' : 'New entry');
+
     const pending = await logAsync({
       description: description.trim() || undefined,
       photoDataUrl: photoDataUrl || undefined,
@@ -200,6 +227,13 @@ export default function AddFood() {
     // MealSection uses to render the row as considered-but-not-committed.
     if (pending && intent === 'curious') {
       await update(pending.id, { notes: CONSIDERING_MARKER });
+    }
+
+    if (pending?.id) {
+      setRecentlyAdded((prev) => [
+        { id: pending.id, name: placeholder, calories: 0, pending: true },
+        ...prev.filter((r) => r.id !== pending.id),
+      ]);
     }
 
     setDescription('');
@@ -247,6 +281,8 @@ export default function AddFood() {
       purchasedAt: receiptDate,
       nutritionSource: it.nutritionSource,
       nutritionConfidence: it.nutritionConfidence,
+      nutritionCitation: it.citation,
+      productImageUrl: it.productImageUrl,
     }));
     const r = await fetch('/api/pantry/items', {
       method: 'POST',
@@ -328,11 +364,27 @@ export default function AddFood() {
               {recentlyAdded.map((r) => (
                 <li
                   key={r.id}
-                  className="flex items-center gap-2 px-3 py-2 bg-white rounded-apple border border-green-100"
+                  className={`flex items-center gap-2 px-3 py-2 bg-white rounded-apple border ${
+                    r.failed ? 'border-red-200' : r.pending ? 'border-blue-100' : 'border-green-100'
+                  }`}
                 >
-                  <Check className="w-4 h-4 text-accent-green shrink-0" />
-                  <span className="flex-1 min-w-0 text-sm text-text-primary truncate">{r.name}</span>
-                  <span className="text-xs text-text-secondary shrink-0">{r.calories} kcal</span>
+                  {r.failed ? (
+                    <AlertTriangle className="w-4 h-4 text-accent-red shrink-0" />
+                  ) : r.pending ? (
+                    <Loader2 className="w-4 h-4 text-accent-blue animate-spin shrink-0" />
+                  ) : (
+                    <Check className="w-4 h-4 text-accent-green shrink-0" />
+                  )}
+                  <span className="flex-1 min-w-0 text-sm text-text-primary truncate">
+                    {r.name}
+                    {r.failed && <span className="text-xs text-accent-red ml-2">failed</span>}
+                  </span>
+                  {!r.pending && !r.failed && (
+                    <span className="text-xs text-text-secondary shrink-0">{r.calories} kcal</span>
+                  )}
+                  {r.pending && (
+                    <span className="text-xs text-text-secondary shrink-0">analyzing…</span>
+                  )}
                   <button
                     onClick={() => handleUndoQuickAdd(r.id)}
                     className="ml-1 p-1.5 rounded-full text-accent-red hover:bg-red-50 active:bg-red-100 touch-manipulation"
@@ -351,19 +403,27 @@ export default function AddFood() {
 
         {/* Receipt scan — entire flow stays inside /add-food. */}
         {receiptStage === 'idle' && (
-          <button
-            onClick={() => { setError(null); setReceiptStage('capture'); }}
-            className="w-full p-3 bg-white rounded-apple-lg shadow-apple active:bg-secondary-bg flex items-center gap-3 touch-manipulation"
-          >
-            <div className="w-10 h-10 rounded-full bg-accent-green/10 flex items-center justify-center shrink-0">
-              <Receipt className="w-5 h-5 text-accent-green" />
-            </div>
-            <div className="text-left flex-1 min-w-0">
-              <h3 className="font-semibold text-text-primary text-sm">Scan a receipt</h3>
-              <p className="text-xs text-text-secondary">Adds items to your pantry, then they show up here as quick chips.</p>
-            </div>
-            <ChevronRight className="w-4 h-4 text-text-secondary shrink-0" />
-          </button>
+          <div className="space-y-2">
+            <button
+              onClick={() => { setError(null); setReceiptStage('capture'); }}
+              className="w-full p-3 bg-white rounded-apple-lg shadow-apple active:bg-secondary-bg flex items-center gap-3 touch-manipulation"
+            >
+              <div className="w-10 h-10 rounded-full bg-accent-green/10 flex items-center justify-center shrink-0">
+                <Receipt className="w-5 h-5 text-accent-green" />
+              </div>
+              <div className="text-left flex-1 min-w-0">
+                <h3 className="font-semibold text-text-primary text-sm">Scan a receipt</h3>
+                <p className="text-xs text-text-secondary">Adds items to your pantry, then they show up here as quick chips.</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-text-secondary shrink-0" />
+            </button>
+            <a
+              href="/pantry"
+              className="block text-xs text-accent-blue text-center py-1 active:opacity-60"
+            >
+              View past receipts →
+            </a>
+          </div>
         )}
 
         {receiptStage === 'capture' && (

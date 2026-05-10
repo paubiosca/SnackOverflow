@@ -559,6 +559,8 @@ export interface BulkPantryInput {
   purchasedAt?: string | null;
   nutritionSource?: 'off' | 'web' | 'estimate' | 'manual' | null;
   nutritionConfidence?: 'high' | 'medium' | 'low' | null;
+  nutritionCitation?: string | null;
+  productImageUrl?: string | null;
 }
 
 // Inserts a batch of pantry rows. Used by the receipt-import flow after the
@@ -570,8 +572,9 @@ export async function bulkInsertPantryItems(userId: string, items: BulkPantryInp
       `INSERT INTO pantry_items (
          user_id, raw_text, normalized_name, qty_total, qty_remaining, unit,
          est_calories_per_unit, est_protein_per_unit, est_carbs_per_unit, est_fat_per_unit,
-         store, source, purchased_at, nutrition_source, nutrition_confidence
-       ) VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+         store, source, purchased_at, nutrition_source, nutrition_confidence,
+         nutrition_citation, product_image_url
+       ) VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
        RETURNING id, raw_text as "rawText", normalized_name as "normalizedName",
          qty_total as "qtyTotal", qty_remaining as "qtyRemaining", unit,
          est_calories_per_unit as "estCaloriesPerUnit",
@@ -594,6 +597,8 @@ export async function bulkInsertPantryItems(userId: string, items: BulkPantryInp
         it.purchasedAt ?? null,
         it.nutritionSource ?? null,
         it.nutritionConfidence ?? null,
+        it.nutritionCitation ?? null,
+        it.productImageUrl ?? null,
       ]
     );
     const row = r.rows[0];
@@ -615,6 +620,97 @@ export async function bulkInsertPantryItems(userId: string, items: BulkPantryInp
     });
   }
   return inserted;
+}
+
+export interface ReceiptItem {
+  id: string;
+  normalizedName: string;
+  rawText: string | null;
+  brand: string | null; // best-effort: pulled from raw_text isn't tracked, so left null for now
+  qty: number;
+  unit: string;
+  kcalPerUnit: number | null;
+  proteinPerUnit: number | null;
+  carbsPerUnit: number | null;
+  fatPerUnit: number | null;
+  nutritionSource: 'off' | 'web' | 'estimate' | 'manual' | null;
+  nutritionConfidence: 'high' | 'medium' | 'low' | null;
+  nutritionCitation: string | null;
+  productImageUrl: string | null;
+  qtyRemaining: number;
+}
+
+export interface ReceiptGroup {
+  store: string | null;
+  purchasedAt: string;             // ISO; the date "session" key
+  itemCount: number;
+  totalKcal: number;               // sum across qtyRemaining * kcalPerUnit
+  items: ReceiptItem[];
+}
+
+// Returns receipts grouped by (store, date) ordered newest first. We bucket on
+// the calendar day (truncated) so multiple inserts in the same trip collapse
+// into a single receipt entry.
+export async function getReceiptHistory(userId: string, opts?: { limit?: number }): Promise<ReceiptGroup[]> {
+  const limit = opts?.limit ?? 100;
+  const r = await sql.query(
+    `SELECT
+       id, raw_text as "rawText", normalized_name as "normalizedName",
+       qty_total as "qtyTotal", qty_remaining as "qtyRemaining", unit,
+       est_calories_per_unit as "estCaloriesPerUnit",
+       est_protein_per_unit as "estProteinPerUnit",
+       est_carbs_per_unit as "estCarbsPerUnit",
+       est_fat_per_unit as "estFatPerUnit",
+       store, purchased_at as "purchasedAt",
+       nutrition_source as "nutritionSource",
+       nutrition_confidence as "nutritionConfidence",
+       nutrition_citation as "nutritionCitation",
+       product_image_url as "productImageUrl"
+     FROM pantry_items
+     WHERE user_id = $1 AND source = 'receipt'
+     ORDER BY purchased_at DESC NULLS LAST, created_at DESC
+     LIMIT $2`,
+    [userId, limit]
+  );
+  const groups = new Map<string, ReceiptGroup>();
+  for (const row of r.rows) {
+    const purchasedIso = row.purchasedAt ? new Date(row.purchasedAt).toISOString() : 'unknown';
+    const dateKey = purchasedIso.slice(0, 10);
+    const groupKey = `${row.store ?? 'unknown'}|${dateKey}`;
+    let group = groups.get(groupKey);
+    if (!group) {
+      group = {
+        store: row.store ?? null,
+        purchasedAt: purchasedIso,
+        itemCount: 0,
+        totalKcal: 0,
+        items: [],
+      };
+      groups.set(groupKey, group);
+    }
+    const qty = Number(row.qtyTotal);
+    const kcalPerUnit = row.estCaloriesPerUnit !== null ? Number(row.estCaloriesPerUnit) : null;
+    group.items.push({
+      id: row.id,
+      rawText: row.rawText ?? null,
+      normalizedName: row.normalizedName,
+      brand: null,
+      qty,
+      unit: row.unit ?? 'item',
+      kcalPerUnit,
+      proteinPerUnit: row.estProteinPerUnit !== null ? Number(row.estProteinPerUnit) : null,
+      carbsPerUnit: row.estCarbsPerUnit !== null ? Number(row.estCarbsPerUnit) : null,
+      fatPerUnit: row.estFatPerUnit !== null ? Number(row.estFatPerUnit) : null,
+      nutritionSource: row.nutritionSource ?? null,
+      nutritionConfidence: row.nutritionConfidence ?? null,
+      nutritionCitation: row.nutritionCitation ?? null,
+      productImageUrl: row.productImageUrl ?? null,
+      qtyRemaining: Number(row.qtyRemaining),
+    });
+    group.itemCount += qty;
+    if (kcalPerUnit != null) group.totalKcal += kcalPerUnit * qty;
+  }
+  return Array.from(groups.values());
 }
 
 // Health ingest tokens ----------------------------------------------------------

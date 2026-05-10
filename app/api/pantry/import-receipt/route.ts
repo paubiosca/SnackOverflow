@@ -18,7 +18,10 @@ import { lookupOpenFoodFacts } from '@/lib/nutrition/openFoodFacts';
 // We don't write to the DB here — the user reviews the result on the next
 // screen and confirms via POST /api/pantry/items.
 
-export const maxDuration = 60;
+// Long-running orchestrator. Locally there's no enforced ceiling; on Vercel
+// Pro this is the cap. We aim to complete in ~30-60s thanks to parallelism +
+// per-call timeouts, but allow headroom for tail latencies.
+export const maxDuration = 300;
 
 export interface EnrichedItem {
   rawText: string;
@@ -71,14 +74,31 @@ export async function POST(request: NextRequest) {
     items.map((it) => lookupOpenFoodFacts([it.brand, it.normalizedName].filter(Boolean).join(' ')))
   );
 
-  // Stage 3: GPT browsing for items OFF missed.
-  const enriched: EnrichedItem[] = [];
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    const off = offResults[i];
+  // Stage 3: GPT browsing for items OFF missed. Parallel with a concurrency
+  // cap so we don't hammer OpenAI; per-call timeout in `lookupNutritionWithBrowsing`
+  // means a single slow item can't stall the whole pipeline.
+  const CONCURRENCY = 6;
+  const missingIdx = items.map((_, i) => i).filter((i) => !offResults[i]);
+  const webResults: Record<number, Awaited<ReturnType<typeof lookupNutritionWithBrowsing>>> = {};
+  for (let start = 0; start < missingIdx.length; start += CONCURRENCY) {
+    const slice = missingIdx.slice(start, start + CONCURRENCY);
+    await Promise.all(
+      slice.map(async (i) => {
+        const item = items[i];
+        webResults[i] = await lookupNutritionWithBrowsing(profile.openaiApiKey!, {
+          brand: item.brand,
+          name: item.normalizedName,
+          packSize: item.packSize,
+          store: item.store,
+        });
+      })
+    );
+  }
 
+  const enriched: EnrichedItem[] = items.map((item, i) => {
+    const off = offResults[i];
     if (off) {
-      enriched.push({
+      return {
         rawText: item.rawText,
         normalizedName: item.normalizedName,
         brand: item.brand ?? off.brand,
@@ -93,23 +113,15 @@ export async function POST(request: NextRequest) {
         carbs: off.carbs,
         fat: off.fat,
         nutritionSource: 'off',
-        // OFF rows are user-curated; treat the high-score matches as 'high'.
         nutritionConfidence: off.matchScore >= 0.7 ? 'high' : 'medium',
         citation: off.productCode ? `https://world.openfoodfacts.org/product/${off.productCode}` : null,
         productImageUrl: off.imageUrl ?? null,
         judgeReason: null,
-      });
-      continue;
+      };
     }
-
-    const web = await lookupNutritionWithBrowsing(profile.openaiApiKey, {
-      brand: item.brand,
-      name: item.normalizedName,
-      packSize: item.packSize,
-      store: item.store,
-    });
+    const web = webResults[i];
     if (web) {
-      enriched.push({
+      return {
         rawText: item.rawText,
         normalizedName: item.normalizedName,
         brand: item.brand,
@@ -128,13 +140,10 @@ export async function POST(request: NextRequest) {
         citation: web.citation,
         productImageUrl: null,
         judgeReason: null,
-      });
-      continue;
+      };
     }
-
-    // Pure-estimate fallback. We could call GPT one more time without browsing,
-    // but a `null` row tells the UI "we couldn't find this — please fill it in".
-    enriched.push({
+    // Estimate fallback (web call timed out or failed entirely).
+    return {
       rawText: item.rawText,
       normalizedName: item.normalizedName,
       brand: item.brand,
@@ -152,9 +161,9 @@ export async function POST(request: NextRequest) {
       nutritionConfidence: 'low',
       citation: null,
       productImageUrl: null,
-      judgeReason: 'No nutrition source found — please fill in or remove.',
-    });
-  }
+      judgeReason: 'Web lookup timed out — please fill in or remove.',
+    };
+  });
 
   // Stage 4: judge.
   if (enriched.length > 0) {

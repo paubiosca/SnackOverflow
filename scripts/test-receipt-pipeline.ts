@@ -81,6 +81,11 @@ const IMAGE_PATH = process.argv[2] || '/tmp/receipt-small.jpg';
     if (!v.ok) console.log(`   ⚠ #${v.index} ${enriched[v.index].name}: ${v.reason}`);
   }
 
+  console.log('\n=== ITEMS WITH CITATIONS ===');
+  enriched.forEach((e, i) => {
+    console.log(`${(i+1).toString().padStart(2)}. ${e.name.padEnd(34)} ${String(e.kcal).padStart(4)} kcal/${e.unit.padEnd(4)} P${e.protein} C${e.carbs} F${e.fat}  [${e.source}/${e.confidence}]${e.citation ? '  ' + e.citation : ''}`);
+  });
+
   console.log('\n=== SUMMARY ===');
   console.log(`items: ${enriched.length}`);
   const counts = enriched.reduce((acc, e) => { acc[e.source] = (acc[e.source] || 0) + 1; return acc; }, {} as Record<string, number>);
