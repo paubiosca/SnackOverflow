@@ -78,18 +78,35 @@ export default function WeekStats({ days, targetDeficit }: Props) {
         </span>
       </div>
 
-      {/* 30-day weight projection from the 7-day moving avg deficit.
-          7700 kcal ≈ 1 kg fat. Positive avg = under target = losing weight. */}
+      {/* Weight projections from the avg deficit. 7700 kcal ≈ 1 kg fat.
+          Positive avg = real deficit = losing weight. */}
       {logged.length >= 3 && (() => {
-        const projectedKg = (avg * 30) / 7700; // positive = loss, negative = gain
-        const sign = projectedKg > 0 ? '−' : projectedKg < 0 ? '+' : '';
-        const tone = projectedKg > 0 ? 'text-accent-green' : projectedKg < 0 ? 'text-accent-red' : 'text-text-primary';
+        const weeklyKg = (avg * 7) / 7700;
+        const monthlyKg = (avg * 30) / 7700;
+        const fmt = (kg: number) => {
+          const sign = kg > 0 ? '−' : kg < 0 ? '+' : '';
+          const tone = kg > 0 ? 'text-accent-green' : kg < 0 ? 'text-accent-red' : 'text-text-primary';
+          // Show g for sub-1kg, kg with 1 decimal otherwise. Easier to read at a glance.
+          const abs = Math.abs(kg);
+          const display = abs < 1 ? `${Math.round(abs * 1000)} g` : `${abs.toFixed(1)} kg`;
+          return { sign, tone, display };
+        };
+        const w = fmt(weeklyKg);
+        const m = fmt(monthlyKg);
         return (
-          <div className="rounded-apple bg-secondary-bg px-3 py-2 flex items-center justify-between">
-            <span className="text-sm text-text-secondary">Projected (1 month)</span>
-            <span className={`text-sm font-semibold ${tone}`}>
-              {sign}{Math.abs(projectedKg).toFixed(1)} kg
-            </span>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-apple bg-secondary-bg px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wide text-text-secondary">Projected weekly</div>
+              <div className={`text-base font-semibold mt-0.5 ${w.tone}`}>
+                {w.sign}{w.display}
+              </div>
+            </div>
+            <div className="rounded-apple bg-secondary-bg px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wide text-text-secondary">Projected monthly</div>
+              <div className={`text-base font-semibold mt-0.5 ${m.tone}`}>
+                {m.sign}{m.display}
+              </div>
+            </div>
           </div>
         );
       })()}

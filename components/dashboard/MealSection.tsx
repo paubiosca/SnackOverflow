@@ -111,10 +111,13 @@ function handleEntryTap(
 }
 
 function MealGroup({ entries, onDelete, onEdit, onClarify, onUpdate, isExpanded, onToggle }: MealGroupProps) {
-  const groupCalories = entries.reduce((sum, e) => sum + e.calories, 0);
-  const groupProtein = entries.reduce((sum, e) => sum + e.protein, 0);
-  const groupCarbs = entries.reduce((sum, e) => sum + e.carbs, 0);
-  const groupFat = entries.reduce((sum, e) => sum + e.fat, 0);
+  // Round once at the sum boundary. Entries' nutrition fields are floats
+  // derived from Postgres DECIMAL strings; summing them produces noise like
+  // 688.9000000000003 which then renders verbatim.
+  const groupCalories = Math.round(entries.reduce((sum, e) => sum + e.calories, 0));
+  const groupProtein = Math.round(entries.reduce((sum, e) => sum + e.protein, 0) * 10) / 10;
+  const groupCarbs = Math.round(entries.reduce((sum, e) => sum + e.carbs, 0) * 10) / 10;
+  const groupFat = Math.round(entries.reduce((sum, e) => sum + e.fat, 0) * 10) / 10;
 
   // Format time from first entry in group
   const formatTime = (dateStr?: string) => {
@@ -279,7 +282,7 @@ function MealGroup({ entries, onDelete, onEdit, onClarify, onUpdate, isExpanded,
 }
 
 export default function MealSection({ mealType, entries, onDelete, onEdit, onClarify, onUpdate }: MealSectionProps) {
-  const totalCalories = entries.reduce((sum, e) => sum + e.calories, 0);
+  const totalCalories = Math.round(entries.reduce((sum, e) => sum + e.calories, 0));
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
 
   const groups = useMemo(() => groupEntriesByTime(entries), [entries]);
