@@ -10,7 +10,8 @@ import Button from '@/components/ui/Button';
 import SuggestionsRail from '@/components/food/SuggestionsRail';
 import ProcessingTray from '@/components/food/ProcessingTray';
 import ClarifyCard from '@/components/food/ClarifyCard';
-import { AlertTriangle, ChevronLeft, ChevronRight, Calendar, Camera, Image as ImageIcon, X, Check } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, Calendar, Camera, Image as ImageIcon, X, Check, Receipt } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 // Sentinel stored in `notes` to mark a "Just curious" entry. The DB schema
 // has no status enum value for this, so the notes field doubles as the marker.
@@ -44,6 +45,7 @@ const suggestMealType = (): MealType => {
 type Intent = 'eating' | 'curious';
 
 export default function AddFood() {
+  const router = useRouter();
   const { profile } = useProfile();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const { entries, logAsync, add, remove, update, answerClarification } = useFoodEntries(getDateString(selectedDate));

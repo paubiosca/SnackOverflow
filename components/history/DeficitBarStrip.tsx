@@ -16,25 +16,22 @@ interface Props {
   onSelect: (date: string) => void;
 }
 
-// Diverging bar chart with a real Y-axis. Vertical scale: each kcal of
-// (goal − consumed) maps to a fixed pixel height. Solid horizontal lines at
-// 0 (the calorie goal) and ±D (planned deficit threshold). Faint ticks every
-// `step` kcal in between, labelled on the right gutter.
-//
-// Bars stack two colors so a "bonus" day reads as strictly better than
-// "on target": green up to the target deficit line, then a brighter gold
-// gradient on top for the overflow above D.
+// Apple-Health-style energy balance bars. Vertical axis is "kcal vs goal":
+//   surplus (ate > goal)  -> bar grows UP, red, labelled "+200" etc.
+//   deficit (ate < goal)  -> bar grows DOWN, green, labelled "−200" etc.
+// The amber "target" line sits BELOW the midline at −D (your planned daily
+// deficit). A green bar that reaches the target line means you hit your plan;
+// extending past it stacks a brighter gold gradient = bonus deficit.
 export default function DeficitBarStrip({ days, targetDeficit, selectedDate, onSelect }: Props) {
   const D = Math.max(100, targetDeficit);
   const HALF = 90; // px per side; total chart height = 180
-  const MAX_KCAL = Math.ceil(D * 1.5 / 100) * 100; // round up to nearest 100
+  const MAX_KCAL = Math.ceil((D * 1.5) / 100) * 100; // round up to nearest 100
   const PX_PER_KCAL = HALF / MAX_KCAL;
-  const GUTTER = 36; // right-side y-axis label gutter
+  const GUTTER = 36;
 
   const barWidth = days.length <= 7 ? 28 : days.length <= 14 ? 16 : 9;
   const gap = days.length <= 7 ? 8 : days.length <= 14 ? 4 : 3;
 
-  // Pick a tick step that's a round 100/200/250/500 close to D/2.
   const step = useMemo(() => {
     const candidates = [100, 200, 250, 500];
     const ideal = D / 2;
@@ -44,40 +41,40 @@ export default function DeficitBarStrip({ days, targetDeficit, selectedDate, onS
   const ticks = useMemo(() => {
     const out: number[] = [];
     for (let v = step; v <= MAX_KCAL; v += step) out.push(v);
-    return out; // positive offsets; mirrored above and below the midline
+    return out;
   }, [step, MAX_KCAL]);
 
   const items = useMemo(() => {
     return days.map((d) => {
-      const delta = d.goal - d.consumed; // + = under goal, − = over
-      const clamped = Math.max(-MAX_KCAL, Math.min(MAX_KCAL, delta));
-      // Split the positive bar into the "green" portion (0..D) and the
-      // "gold bonus" portion (D..clamped) so they stack visually.
-      const greenKcal = Math.max(0, Math.min(D, clamped));
-      const goldKcal = Math.max(0, clamped - D);
-      const redKcal = Math.max(0, -clamped);
+      // surplus = consumed - goal. Positive means over-eating.
+      const surplus = d.consumed - d.goal;
+      const clamped = Math.max(-MAX_KCAL, Math.min(MAX_KCAL, surplus));
+      const redKcal = Math.max(0, clamped);                            // surplus → red, up
+      const deficitKcal = Math.max(0, -clamped);                       // |under-goal|
+      const greenKcal = Math.min(D, deficitKcal);                      // green: 0 .. D below midline
+      const goldKcal = Math.max(0, deficitKcal - D);                   // gold: D .. clamped below
       return {
         ...d,
-        delta,
+        surplus,
+        redPx: redKcal * PX_PER_KCAL,
         greenPx: greenKcal * PX_PER_KCAL,
         goldPx: goldKcal * PX_PER_KCAL,
-        redPx: redKcal * PX_PER_KCAL,
       };
     });
   }, [days, MAX_KCAL, D, PX_PER_KCAL]);
 
   const todayStr = new Date().toISOString().slice(0, 10);
-  const targetTopOffset = HALF - D * PX_PER_KCAL;
-  const targetBottomOffset = HALF + D * PX_PER_KCAL;
+  // Target line is BELOW the midline now (deficit goes down).
+  const targetBelowOffset = HALF + D * PX_PER_KCAL;
 
   return (
     <div className="select-none">
       <div className="relative" style={{ height: HALF * 2, paddingRight: GUTTER }}>
-        {/* Tick lines + labels (faint dashed) */}
+        {/* Tick lines + labels: "+v" above (surplus), "−v" below (deficit) */}
         {ticks.map((v) => {
-          const topY = HALF - v * PX_PER_KCAL;
-          const botY = HALF + v * PX_PER_KCAL;
-          if (v === D) return null; // target line drawn separately
+          const topY = HALF - v * PX_PER_KCAL; // above midline
+          const botY = HALF + v * PX_PER_KCAL; // below midline
+          if (v === D) return null;            // target line drawn separately
           return (
             <div key={v}>
               <div
@@ -104,25 +101,19 @@ export default function DeficitBarStrip({ days, targetDeficit, selectedDate, onS
           );
         })}
 
-        {/* Target deficit line (above midline) — strong, colored */}
+        {/* Target deficit line — below midline, amber. Hitting/passing this is good. */}
         <div
           className="absolute left-0 border-t-2 border-amber-400 pointer-events-none"
-          style={{ top: targetTopOffset, right: GUTTER }}
+          style={{ top: targetBelowOffset, right: GUTTER }}
         />
         <span
           className="absolute right-0 text-[10px] font-semibold text-amber-600 leading-none -translate-y-1/2"
-          style={{ top: targetTopOffset }}
+          style={{ top: targetBelowOffset }}
         >
           target
         </span>
 
-        {/* Mirror "lost-day" line below midline at -D — softer red */}
-        <div
-          className="absolute left-0 border-t border-red-300 pointer-events-none"
-          style={{ top: targetBottomOffset, right: GUTTER }}
-        />
-
-        {/* Midline (goal) — solid */}
+        {/* Midline (goal) */}
         <div
           className="absolute left-0 border-t-[1.5px] border-gray-400 pointer-events-none"
           style={{ top: HALF, right: GUTTER }}
@@ -135,7 +126,10 @@ export default function DeficitBarStrip({ days, targetDeficit, selectedDate, onS
         </span>
 
         {/* Bars */}
-        <div className="absolute inset-0 flex justify-center" style={{ paddingRight: GUTTER, gap: `${gap}px` }}>
+        <div
+          className="absolute inset-0 flex justify-center"
+          style={{ paddingRight: GUTTER, gap: `${gap}px` }}
+        >
           {items.map((d) => {
             const isSelected = d.date === selectedDate;
             const isToday = d.date === todayStr;
@@ -147,35 +141,35 @@ export default function DeficitBarStrip({ days, targetDeficit, selectedDate, onS
                 style={{ width: barWidth, WebkitTapHighlightColor: 'transparent' }}
                 aria-label={`${d.date}: ${d.consumed} kcal, goal ${d.goal}`}
               >
-                {/* Positive (under-goal): bottom = midline, grows up */}
+                {/* Surplus (over goal): top of bar starts at midline, grows UP, red. */}
+                {d.hasData && d.redPx > 0 && (
+                  <div
+                    className={`absolute left-0 right-0 rounded-t-sm bg-accent-red transition-all ${
+                      isSelected ? 'ring-2 ring-text-primary ring-offset-1' : ''
+                    }`}
+                    style={{ top: HALF - d.redPx, height: d.redPx }}
+                  />
+                )}
+                {/* Deficit (under goal): top of bar at midline, grows DOWN. Green up to D, then gold. */}
                 {d.hasData && d.greenPx > 0 && (
                   <div
                     className={`absolute left-0 right-0 bg-accent-green transition-all ${
-                      d.goldPx > 0 ? '' : 'rounded-t-sm'
+                      d.goldPx > 0 ? '' : 'rounded-b-sm'
                     } ${isSelected ? 'ring-2 ring-text-primary ring-offset-1' : ''}`}
-                    style={{ top: HALF - d.greenPx, height: d.greenPx }}
+                    style={{ top: HALF, height: d.greenPx }}
                   />
                 )}
                 {d.hasData && d.goldPx > 0 && (
                   <div
-                    className={`absolute left-0 right-0 rounded-t-sm transition-all ${
+                    className={`absolute left-0 right-0 rounded-b-sm transition-all ${
                       isSelected ? 'ring-2 ring-text-primary ring-offset-1' : ''
                     }`}
                     style={{
-                      top: HALF - d.greenPx - d.goldPx,
+                      top: HALF + d.greenPx,
                       height: d.goldPx,
-                      background: 'linear-gradient(to top, #fbbf24, #fde047)',
+                      background: 'linear-gradient(to bottom, #fbbf24, #fde047)',
                       boxShadow: '0 0 6px rgba(251, 191, 36, 0.55)',
                     }}
-                  />
-                )}
-                {/* Negative (over-goal): top = midline, grows down */}
-                {d.hasData && d.redPx > 0 && (
-                  <div
-                    className={`absolute left-0 right-0 rounded-b-sm bg-accent-red transition-all ${
-                      isSelected ? 'ring-2 ring-text-primary ring-offset-1' : ''
-                    }`}
-                    style={{ top: HALF, height: d.redPx }}
                   />
                 )}
 

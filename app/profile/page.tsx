@@ -7,13 +7,11 @@ import { useProfile } from '@/hooks/useProfile';
 import BottomNav from '@/components/ui/BottomNav';
 import Card from '@/components/ui/Card';
 import HealthSync from '@/components/profile/HealthSync';
-import HealthImport from '@/components/profile/HealthImport';
-import QuickBackfill from '@/components/profile/QuickBackfill';
 import StravaConnect from '@/components/profile/StravaConnect';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
-import { User, Flame, BarChart3, ChevronRight, Activity, Watch, RefreshCw } from 'lucide-react';
+import { User, Flame, BarChart3, ChevronRight, Activity, Watch, RefreshCw, ShoppingBasket } from 'lucide-react';
 import { ActivityApproach, ActivityLevel, ACTIVITY_LABELS, ACTIVITY_APPROACH_LABELS } from '@/lib/types';
 
 export default function Profile() {
@@ -98,14 +96,8 @@ export default function Profile() {
         {/* Strava (Garmin runs) — primary source for running calories */}
         <StravaConnect />
 
-        {/* One-off backfill via Apple Health Export ZIP (the easiest free path) */}
-        <HealthImport />
-
-        {/* Apple Health sync (iOS Shortcut) — for ongoing daily updates */}
+        {/* Apple Health sync (iOS Shortcut) — for ongoing daily steps + BMR + walking */}
         <HealthSync />
-
-        {/* Quick backfill: type-one-number fallback if you don't want any of the above */}
-        <QuickBackfill />
 
         {/* User info */}
         <Card>
@@ -185,6 +177,27 @@ export default function Profile() {
                 <h3 className="font-semibold text-text-primary">Progress Insights</h3>
                 <p className="text-sm text-text-secondary">
                   View trends, streaks & patterns
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="w-5 h-5 text-text-secondary" />
+          </button>
+        </Card>
+
+        {/* Pantry — receipt scanning */}
+        <Card>
+          <button
+            onClick={() => router.push('/pantry')}
+            className="w-full flex items-center justify-between"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-accent-green/10 rounded-full flex items-center justify-center">
+                <ShoppingBasket className="w-5 h-5 text-accent-green" />
+              </div>
+              <div className="text-left">
+                <h3 className="font-semibold text-text-primary">Pantry</h3>
+                <p className="text-sm text-text-secondary">
+                  Scan a receipt to fill your fridge
                 </p>
               </div>
             </div>
