@@ -175,13 +175,21 @@ export function calculateDailyTotals(entries: FoodEntry[]): {
   carbs: number;
   fat: number;
 } {
+  // Skip rows that have no nutrition yet (pure pending) or failed.
+  // 'needs_clarification' rows still count if a preliminary estimate is present.
   return entries.reduce(
-    (totals, entry) => ({
-      calories: totals.calories + entry.calories,
-      protein: totals.protein + entry.protein,
-      carbs: totals.carbs + entry.carbs,
-      fat: totals.fat + entry.fat,
-    }),
+    (totals, entry) => {
+      // Skip rows that have no nutrition yet (pending) or failed.
+      // 'needs_clarification' rows still count if a preliminary estimate is present.
+      const status = entry.status ?? 'resolved';
+      if (status === 'failed' || status === 'pending') return totals;
+      return {
+        calories: totals.calories + entry.calories,
+        protein: totals.protein + entry.protein,
+        carbs: totals.carbs + entry.carbs,
+        fat: totals.fat + entry.fat,
+      };
+    },
     { calories: 0, protein: 0, carbs: 0, fat: 0 }
   );
 }
@@ -367,9 +375,15 @@ export function calculateDayOfWeekAnalysis(
   }
 
   dailySummaries.forEach(summary => {
+    if (!summary.date) return;
+
     const date = new Date(summary.date + 'T12:00:00'); // Noon to avoid timezone issues
     const day = date.getDay();
-    const data = dayData.get(day)!;
+
+    if (isNaN(day) || day < 0 || day > 6) return;
+
+    const data = dayData.get(day);
+    if (!data) return;
 
     data.calories.push(summary.totalCalories);
     if (Math.abs(summary.totalCalories - calorieGoal) <= 100) {

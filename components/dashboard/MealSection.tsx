@@ -3,8 +3,25 @@
 import { useMemo } from 'react';
 import { FoodEntry, MealType, MEAL_LABELS } from '@/lib/types';
 import Card from '@/components/ui/Card';
-import { Sunrise, Sun, Moon, Cookie, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Sunrise, Sun, Moon, Cookie, Trash2, ChevronDown, ChevronUp, Loader2, AlertCircle, XCircle } from 'lucide-react';
 import { ReactNode, useState } from 'react';
+
+// Visual indicator for the async lifecycle of an entry. The "where" is
+// deliberate: the dot lives on the food card itself (Apple/iMessage-style),
+// not as a global toast.
+function StatusDot({ entry }: { entry: FoodEntry }) {
+  const status = entry.status ?? 'resolved';
+  if (status === 'pending') {
+    return <Loader2 className="w-4 h-4 text-text-secondary animate-spin shrink-0" aria-label="Analyzing" />;
+  }
+  if (status === 'needs_clarification') {
+    return <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" aria-label="Needs clarification" />;
+  }
+  if (status === 'failed') {
+    return <XCircle className="w-4 h-4 text-accent-red shrink-0" aria-label="Failed" />;
+  }
+  return null;
+}
 
 const MEAL_ICONS: Record<MealType, ReactNode> = {
   breakfast: <Sunrise className="w-5 h-5 text-amber-500" />,
@@ -18,6 +35,7 @@ interface MealSectionProps {
   entries: FoodEntry[];
   onDelete: (id: string) => void;
   onEdit?: (entry: FoodEntry) => void;
+  onClarify?: (entry: FoodEntry) => void;
 }
 
 // Group entries that were logged within 30 minutes of each other
@@ -62,11 +80,28 @@ interface MealGroupProps {
   entries: FoodEntry[];
   onDelete: (id: string) => void;
   onEdit?: (entry: FoodEntry) => void;
+  onClarify?: (entry: FoodEntry) => void;
   isExpanded: boolean;
   onToggle: () => void;
 }
 
-function MealGroup({ entries, onDelete, onEdit, isExpanded, onToggle }: MealGroupProps) {
+// Tap routing: pending → no-op (the row is updating itself); needs_clarification →
+// clarify sheet; resolved/failed → edit modal. Keeps a single tap target per card.
+function handleEntryTap(
+  entry: FoodEntry,
+  onEdit?: (e: FoodEntry) => void,
+  onClarify?: (e: FoodEntry) => void,
+) {
+  const status = entry.status ?? 'resolved';
+  if (status === 'pending') return;
+  if (status === 'needs_clarification') {
+    onClarify?.(entry);
+    return;
+  }
+  onEdit?.(entry);
+}
+
+function MealGroup({ entries, onDelete, onEdit, onClarify, isExpanded, onToggle }: MealGroupProps) {
   const groupCalories = entries.reduce((sum, e) => sum + e.calories, 0);
   const groupProtein = entries.reduce((sum, e) => sum + e.protein, 0);
   const groupCarbs = entries.reduce((sum, e) => sum + e.carbs, 0);
@@ -84,22 +119,42 @@ function MealGroup({ entries, onDelete, onEdit, isExpanded, onToggle }: MealGrou
   // Single item - show directly
   if (entries.length === 1) {
     const entry = entries[0];
+    const status = entry.status ?? 'resolved';
+    const isPending = status === 'pending';
+    const isFailed = status === 'failed';
+    const tapAction = status === 'needs_clarification' ? 'Tap to refine' : null;
     return (
       <div
         className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors group cursor-pointer"
-        onClick={() => onEdit?.(entry)}
+        onClick={() => handleEntryTap(entry, onEdit, onClarify)}
       >
-        <div className="flex-1 min-w-0">
-          <p className="font-medium text-text-primary truncate">{entry.name}</p>
-          <p className="text-xs text-text-secondary">
-            P: {entry.protein}g • C: {entry.carbs}g • F: {entry.fat}g
-            {timeLabel && <span className="ml-2 text-gray-400">• {timeLabel}</span>}
-          </p>
+        <div className="flex-1 min-w-0 flex items-center gap-2">
+          <StatusDot entry={entry} />
+          <div className="min-w-0">
+            <p className={`font-medium truncate ${isPending || isFailed ? 'text-text-secondary' : 'text-text-primary'}`}>
+              {entry.name}
+            </p>
+            <p className="text-xs text-text-secondary">
+              {isPending ? (
+                'Analyzing…'
+              ) : isFailed ? (
+                'Tap to retry'
+              ) : (
+                <>
+                  P: {entry.protein}g • C: {entry.carbs}g • F: {entry.fat}g
+                  {tapAction && <span className="ml-2 text-amber-600 font-medium">• {tapAction}</span>}
+                  {timeLabel && <span className="ml-2 text-gray-400">• {timeLabel}</span>}
+                </>
+              )}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold text-text-primary">
-            {entry.calories} kcal
-          </span>
+          {!isPending && (
+            <span className={`text-sm font-semibold ${status === 'needs_clarification' ? 'text-text-secondary' : 'text-text-primary'}`}>
+              {entry.calories} kcal
+            </span>
+          )}
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
             className="opacity-0 group-hover:opacity-100 transition-opacity text-accent-red p-1 touch-manipulation"
@@ -148,17 +203,22 @@ function MealGroup({ entries, onDelete, onEdit, isExpanded, onToggle }: MealGrou
             <div
               key={entry.id}
               className="flex items-center justify-between px-4 pl-8 py-2 hover:bg-gray-100 transition-colors group cursor-pointer"
-              onClick={() => onEdit?.(entry)}
+              onClick={() => handleEntryTap(entry, onEdit, onClarify)}
             >
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-text-primary truncate">{entry.name}</p>
-                <p className="text-xs text-text-secondary">
-                  P: {entry.protein}g • C: {entry.carbs}g • F: {entry.fat}g
-                </p>
+              <div className="flex-1 min-w-0 flex items-center gap-2">
+                <StatusDot entry={entry} />
+                <div className="min-w-0">
+                  <p className="text-sm text-text-primary truncate">{entry.name}</p>
+                  <p className="text-xs text-text-secondary">
+                    {(entry.status ?? 'resolved') === 'pending'
+                      ? 'Analyzing…'
+                      : <>P: {entry.protein}g • C: {entry.carbs}g • F: {entry.fat}g</>}
+                  </p>
+                </div>
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-sm text-text-secondary">
-                  {entry.calories} kcal
+                  {(entry.status ?? 'resolved') === 'pending' ? '—' : `${entry.calories} kcal`}
                 </span>
                 <button
                   onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
@@ -176,7 +236,7 @@ function MealGroup({ entries, onDelete, onEdit, isExpanded, onToggle }: MealGrou
   );
 }
 
-export default function MealSection({ mealType, entries, onDelete, onEdit }: MealSectionProps) {
+export default function MealSection({ mealType, entries, onDelete, onEdit, onClarify }: MealSectionProps) {
   const totalCalories = entries.reduce((sum, e) => sum + e.calories, 0);
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
 
@@ -220,6 +280,7 @@ export default function MealSection({ mealType, entries, onDelete, onEdit }: Mea
               entries={group}
               onDelete={onDelete}
               onEdit={onEdit}
+              onClarify={onClarify}
               isExpanded={expandedGroups.has(index)}
               onToggle={() => toggleGroup(index)}
             />

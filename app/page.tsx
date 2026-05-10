@@ -18,6 +18,8 @@ import WeightTracker from '@/components/dashboard/WeightTracker';
 import ActiveCaloriesTracker from '@/components/dashboard/ActiveCaloriesTracker';
 import WeeklyDeficitChart from '@/components/dashboard/WeeklyDeficitChart';
 import EditFoodModal from '@/components/food/EditFoodModal';
+import ClarifySheet from '@/components/food/ClarifySheet';
+import BurnedCaloriesTile from '@/components/dashboard/BurnedCaloriesTile';
 
 // Helper to get local date string
 const getLocalDateString = (): string => {
@@ -32,8 +34,9 @@ export default function Dashboard() {
   const router = useRouter();
   const { status } = useSession();
   const { profile, isLoading: profileLoading, isOnboarded, isAuthenticated, calorieGoal, macroTargets } = useProfile();
-  const { entries, totals, getEntriesByMeal, remove, update, isLoading: entriesLoading } = useFoodEntries();
+  const { entries, totals, getEntriesByMeal, remove, update, answerClarification, isLoading: entriesLoading } = useFoodEntries();
   const [editingEntry, setEditingEntry] = useState<FoodEntry | null>(null);
+  const [clarifyingEntry, setClarifyingEntry] = useState<FoodEntry | null>(null);
   const [activeCaloriesBurned, setActiveCaloriesBurned] = useState(0);
 
   // Load active calories on mount
@@ -106,6 +109,9 @@ export default function Dashboard() {
           <MealBreakdown entries={entries} />
         </Card>
 
+        {/* Burned calories from Terra (hidden until a wearable is connected) */}
+        <BurnedCaloriesTile consumedKcal={totals.calories} />
+
         {/* Weekly Deficit Chart */}
         <WeeklyDeficitChart baseCalorieGoal={calorieGoal} />
 
@@ -129,6 +135,7 @@ export default function Dashboard() {
             entries={getEntriesByMeal(mealType)}
             onDelete={remove}
             onEdit={setEditingEntry}
+            onClarify={setClarifyingEntry}
           />
         ))}
       </div>
@@ -141,6 +148,14 @@ export default function Dashboard() {
         onSave={update}
         onDelete={remove}
       />
+
+      {clarifyingEntry && (
+        <ClarifySheet
+          entry={clarifyingEntry}
+          onAnswer={(ans) => answerClarification(clarifyingEntry.id, ans)}
+          onClose={() => setClarifyingEntry(null)}
+        />
+      )}
 
       <BottomNav />
     </main>

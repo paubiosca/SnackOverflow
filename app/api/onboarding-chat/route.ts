@@ -35,13 +35,27 @@ You are collecting the following information in order:
 9. summary - Summarize and confirm everything
 10. complete - Done!
 
+DETECTING DYNAMIC APPROACH SIGNALS:
+At ANY point in the conversation, watch for signals that the user might benefit from the DYNAMIC approach:
+- Mentions fitness trackers: "Apple Watch", "Fitbit", "Garmin", "smartwatch", "fitness tracker"
+- Variable activity: "my activity varies", "some days I exercise more", "inconsistent schedule", "depends on the day"
+- Exercise tracking interest: "track my workouts", "log exercise", "credit for working out", "earn calories"
+- Active lifestyle mentions: "I run", "I go to the gym", "training for", "workout routine varies"
+
+When you detect these signals:
+1. Acknowledge what they said
+2. Proactively recommend the DYNAMIC approach, explaining why it fits their situation
+3. Set activityApproach to "dynamic" if they agree (or let them choose)
+4. Skip directly to asking about their active_calorie_goal instead of activity_level
+
 IMPORTANT RULES:
 - Be conversational and friendly, but concise
-- Calculate and share BMR/TDEE when you have the data (after body_metrics)
+- NEVER calculate calories yourself - the server provides calculated values in the context
+- When explaining calculations, use the exact values provided in the context (bmr, sedentaryTdee, staticTdee, etc.)
 - Extract data from user messages even if they provide multiple pieces at once
 - Always provide quick reply options when appropriate
 - Use metric units (cm, kg)
-- When explaining activity approaches, give a concrete example for dynamic: "Base 1,744 + 450 active = 2,194 eating budget"
+- When explaining dynamic approach, use the concrete values from context: "Your sedentary base would be {sedentaryTdee} + active calories you burn = your daily budget"
 
 You must respond with valid JSON matching this schema:
 {
@@ -76,7 +90,15 @@ function buildConversationContext(
   if (extractedData.weightKg && extractedData.heightCm && extractedData.age && extractedData.gender) {
     const bmr = calculateBMR(extractedData.weightKg, extractedData.heightCm, extractedData.age, extractedData.gender);
     const sedentaryTdee = calculateTDEE(extractedData.weightKg, extractedData.heightCm, extractedData.age, extractedData.gender, 'sedentary');
-    context += `\nCalculated values:\n- BMR: ${Math.round(bmr)} kcal\n- Sedentary TDEE: ${sedentaryTdee} kcal\n`;
+    const activityLevel = extractedData.activityLevel || 'moderate';
+    const staticTdee = calculateTDEE(extractedData.weightKg, extractedData.heightCm, extractedData.age, extractedData.gender, activityLevel);
+
+    context += `\nCalculated values (USE THESE EXACT NUMBERS when explaining to user):`;
+    context += `\n- BMR (basal metabolic rate): ${Math.round(bmr)} kcal`;
+    context += `\n- Sedentary TDEE (for DYNAMIC approach base): ${sedentaryTdee} kcal`;
+    context += `\n- Static TDEE with ${activityLevel} activity: ${staticTdee} kcal`;
+    context += `\n- Example dynamic daily budget: ${sedentaryTdee} base + 400 active = ${sedentaryTdee + 400} kcal`;
+    context += `\n`;
   }
 
   return context;
@@ -161,6 +183,17 @@ export async function POST(request: NextRequest) {
   try {
     const body: OnboardingChatRequest = await request.json();
     const { message, currentTopic, extractedData, conversationHistory, apiKey } = body;
+
+    // Debug mode: return context without calling OpenAI
+    if (apiKey === 'debug') {
+      const contextMessage = buildConversationContext(currentTopic, extractedData, conversationHistory);
+      return NextResponse.json({
+        debug: true,
+        systemPrompt: SYSTEM_PROMPT,
+        contextMessage,
+        userMessage: message,
+      });
+    }
 
     if (!apiKey) {
       return NextResponse.json({ error: 'API key required' }, { status: 400 });

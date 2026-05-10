@@ -99,10 +99,102 @@ CREATE TABLE IF NOT EXISTS verification_tokens (
   PRIMARY KEY (identifier, token)
 );
 
+-- Pantry items: purchased food awaiting consumption, populated from receipt scans or manual entry
+CREATE TABLE IF NOT EXISTS pantry_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  raw_text VARCHAR(255),
+  normalized_name VARCHAR(255) NOT NULL,
+  qty_total DECIMAL(6,2) NOT NULL DEFAULT 1,
+  qty_remaining DECIMAL(6,2) NOT NULL DEFAULT 1,
+  unit VARCHAR(32) DEFAULT 'item',
+  est_calories_per_unit DECIMAL(7,1),
+  est_protein_per_unit DECIMAL(6,1),
+  est_carbs_per_unit DECIMAL(6,1),
+  est_fat_per_unit DECIMAL(6,1),
+  store VARCHAR(64),
+  source VARCHAR(32) NOT NULL DEFAULT 'manual' CHECK (source IN ('receipt', 'manual')),
+  status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'depleted', 'expired', 'discarded')),
+  purchased_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Async logging + pantry-link columns on food_entries (idempotent additions)
+ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS consumed_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS status VARCHAR(24) NOT NULL DEFAULT 'resolved'
+  CHECK (status IN ('pending', 'needs_clarification', 'resolved', 'failed'));
+ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS clarifying_question TEXT;
+ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS clarifying_suggestions JSONB;
+ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS clarifying_answer TEXT;
+ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS ai_estimated_calories DECIMAL(7,1);
+ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS ai_estimated_protein DECIMAL(6,1);
+ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS ai_estimated_carbs DECIMAL(6,1);
+ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS ai_estimated_fat DECIMAL(6,1);
+ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS ai_response_id VARCHAR(128);
+ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS source VARCHAR(32) NOT NULL DEFAULT 'manual';
+ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS pantry_item_id UUID REFERENCES pantry_items(id) ON DELETE SET NULL;
+ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS input_description TEXT;
+ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS additional_context TEXT;
+
+-- Allow nullable nutrition while a row is pending (resolved rows still must have values, enforced in app code).
+ALTER TABLE food_entries ALTER COLUMN calories DROP NOT NULL;
+ALTER TABLE food_entries ALTER COLUMN protein DROP NOT NULL;
+ALTER TABLE food_entries ALTER COLUMN carbs DROP NOT NULL;
+ALTER TABLE food_entries ALTER COLUMN fat DROP NOT NULL;
+
+-- Backfill consumed_at from created_at for existing rows (one-time, safe to re-run).
+UPDATE food_entries SET consumed_at = created_at WHERE consumed_at IS NULL;
+
+-- Wearable / activity data (Terra-normalized daily summaries)
+CREATE TABLE IF NOT EXISTS wearable_accounts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider VARCHAR(32) NOT NULL,
+  terra_user_id VARCHAR(128),
+  scopes TEXT,
+  connected_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, provider)
+);
+
+-- Personal ingest tokens for the iOS Shortcut. Each user can mint several
+-- (e.g., one per device). The Shortcut puts this in a Bearer header when
+-- POSTing daily Health summaries.
+CREATE TABLE IF NOT EXISTS health_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token VARCHAR(96) UNIQUE NOT NULL,
+  label VARCHAR(64),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  last_used_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX IF NOT EXISTS idx_health_tokens_token ON health_tokens(token);
+
+CREATE TABLE IF NOT EXISTS daily_activity (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  date DATE NOT NULL,
+  active_kcal DECIMAL(7,1),
+  bmr_kcal DECIMAL(7,1),
+  total_kcal DECIMAL(7,1),
+  steps INTEGER,
+  resting_hr INTEGER,
+  source VARCHAR(32),
+  raw JSONB,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, date)
+);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_food_entries_user_date ON food_entries(user_id, date);
+CREATE INDEX IF NOT EXISTS idx_food_entries_user_consumed_at ON food_entries(user_id, consumed_at);
+CREATE INDEX IF NOT EXISTS idx_food_entries_user_status ON food_entries(user_id, status) WHERE status IN ('pending', 'needs_clarification');
+CREATE INDEX IF NOT EXISTS idx_food_entries_user_name ON food_entries(user_id, name);
+CREATE INDEX IF NOT EXISTS idx_pantry_items_user_status ON pantry_items(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_water_logs_user_date ON water_logs(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_weight_logs_user_date ON weight_logs(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_profiles_user ON profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_daily_activity_user_date ON daily_activity(user_id, date);

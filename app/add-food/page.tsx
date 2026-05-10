@@ -10,6 +10,8 @@ import BottomNav from '@/components/ui/BottomNav';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import TextEntry from '@/components/food/TextEntry';
+import SuggestionsRail from '@/components/food/SuggestionsRail';
+import { FoodSuggestion } from '@/lib/types';
 import IngredientInput from '@/components/cook/IngredientInput';
 import IngredientsReview from '@/components/cook/IngredientsReview';
 import RecipeList from '@/components/cook/RecipeList';
@@ -59,7 +61,7 @@ interface FoodPreview {
 export default function AddFood() {
   const router = useRouter();
   const { profile, calorieGoal, macroTargets } = useProfile();
-  const { add, entries } = useFoodEntries();
+  const { add, logAsync, entries } = useFoodEntries();
 
   const [mode, setMode] = useState<Mode>('select');
   const [error, setError] = useState<string | null>(null);
@@ -184,6 +186,34 @@ export default function AddFood() {
       carbs: foodPreview.nutrition.carbs,
       fat: foodPreview.nutrition.fat,
       isManualEntry: false,
+      date: getDateString(selectedDate),
+    });
+    router.push('/');
+  };
+
+  // One-tap log from a suggestion chip — full nutrition is already known, so this
+  // is a synchronous insert (no LLM call). Fastest path in the app.
+  const handlePickSuggestion = async (s: FoodSuggestion) => {
+    await add({
+      name: s.name,
+      mealType: s.mealType,
+      calories: s.calories,
+      protein: s.protein,
+      carbs: s.carbs,
+      fat: s.fat,
+      isManualEntry: false,
+      date: getDateString(selectedDate),
+    });
+    router.push('/');
+  };
+
+  // Quick async log: skip the synchronous preview and let the worker resolve in the background.
+  // Lets the user fire-and-forget multiple items without waiting on each LLM call.
+  const handleQuickLog = async () => {
+    if (!foodQuery.trim()) return;
+    await logAsync({
+      description: foodQuery,
+      mealType: selectedMealType,
       date: getDateString(selectedDate),
     });
     router.push('/');
@@ -441,6 +471,7 @@ export default function AddFood() {
         {/* Mode: Should I Eat This? */}
         {mode === 'should_i_eat' && (
           <div className="space-y-4">
+            <SuggestionsRail mealType={selectedMealType} onPick={handlePickSuggestion} />
             <Card>
               <h3 className="font-semibold text-text-primary mb-3 flex items-center gap-2">
                 <HelpCircle className="w-5 h-5 text-accent-blue" />
@@ -468,13 +499,23 @@ export default function AddFood() {
                   Cancel
                 </Button>
                 <Button
+                  variant="secondary"
                   onClick={handleAnalyzeFood}
-                  fullWidth
                   disabled={!foodQuery.trim() || isAnalyzing}
                 >
-                  {isAnalyzing ? 'Analyzing...' : 'Check Nutrition'}
+                  {isAnalyzing ? 'Analyzing...' : 'Preview'}
+                </Button>
+                <Button
+                  onClick={handleQuickLog}
+                  fullWidth
+                  disabled={!foodQuery.trim()}
+                >
+                  Log it
                 </Button>
               </div>
+              <p className="text-xs text-text-secondary mt-2 text-center">
+                Tap Log it to add now and let the AI figure it out in the background.
+              </p>
             </Card>
 
             {/* Current Status */}

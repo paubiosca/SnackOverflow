@@ -21,22 +21,81 @@ export interface UserProfile {
   openaiApiKey?: string; // OpenAI API key (stored in database)
 }
 
+export type FoodEntryStatus = 'pending' | 'needs_clarification' | 'resolved' | 'failed';
+
+export type FoodEntrySource = 'manual' | 'analyze-text' | 'analyze-photo' | 'pantry' | 'recent' | 'receipt';
+
+export interface ClarifyingSuggestion {
+  label: string;
+  value: string;
+}
+
 export interface FoodEntry {
   id: string;
   name: string;
   mealType: MealType;
-  date: string; // ISO date string (YYYY-MM-DD)
+  date: string; // ISO date string (YYYY-MM-DD) — kept for grouping/back-compat
+  consumedAt?: string; // ISO timestamp — exact moment eaten, used for "around this time yesterday"
+  // Nutrition: 0 while status === 'pending' (no LLM result yet); real values once resolved.
   calories: number;
   protein: number;
   carbs: number;
   fat: number;
   fiber?: number;
   sugar?: number;
+  // Provenance + lifecycle. Optional so legacy callsites that build FoodEntry objects
+  // (treated as 'resolved' / 'manual' by default) still type-check during the rollout.
+  status?: FoodEntryStatus;
+  source?: FoodEntrySource;
   isManualEntry: boolean;
   aiConfidence?: number;
-  photoUrl?: string; // base64 data URL
+  aiEstimatedCalories?: number; // pre-clarification estimate, kept for correction tracking
+  aiEstimatedProtein?: number;
+  aiEstimatedCarbs?: number;
+  aiEstimatedFat?: number;
+  clarifyingQuestion?: string;
+  clarifyingSuggestions?: ClarifyingSuggestion[];
+  clarifyingAnswer?: string;
+  pantryItemId?: string;
+  photoUrl?: string;
   notes?: string;
-  createdAt?: string; // ISO timestamp for grouping
+  // Worker inputs (immutable; the LLM reads these to compute the analysis).
+  inputDescription?: string;
+  additionalContext?: string;
+  createdAt?: string;
+}
+
+export interface PantryItem {
+  id: string;
+  rawText?: string;
+  normalizedName: string;
+  qtyTotal: number;
+  qtyRemaining: number;
+  unit: string;
+  estCaloriesPerUnit?: number;
+  estProteinPerUnit?: number;
+  estCarbsPerUnit?: number;
+  estFatPerUnit?: number;
+  store?: string;
+  source: 'receipt' | 'manual';
+  status: 'active' | 'depleted' | 'expired' | 'discarded';
+  purchasedAt?: string;
+}
+
+export interface FoodSuggestion {
+  source: 'recent' | 'time-of-day' | 'frequent' | 'pantry';
+  name: string;
+  mealType: MealType;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  // For pantry chips
+  pantryItemId?: string;
+  qtyRemaining?: number;
+  // For "ate this Y times" / "last on" hints
+  occurrences?: number;
+  lastEatenAt?: string;
 }
 
 export interface WaterLog {

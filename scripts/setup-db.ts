@@ -1,6 +1,12 @@
+// Load .env.local before importing @vercel/postgres so POSTGRES_URL is available
+// when its module-level pool is initialized. Without this, running the script
+// outside `next dev` fails with `missing_connection_string`.
+import { config as loadEnv } from 'dotenv';
+import path from 'path';
+loadEnv({ path: path.join(__dirname, '../.env.local') });
+
 import { sql } from '@vercel/postgres';
 import fs from 'fs';
-import path from 'path';
 
 async function setupDatabase() {
   console.log('Setting up database...');

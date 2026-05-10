@@ -6,6 +6,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { useProfile } from '@/hooks/useProfile';
 import BottomNav from '@/components/ui/BottomNav';
 import Card from '@/components/ui/Card';
+import HealthSync from '@/components/profile/HealthSync';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
@@ -88,6 +89,9 @@ export default function Profile() {
       </header>
 
       <div className="px-4 py-4 space-y-4 page-transition">
+        {/* Apple Health sync (iOS Shortcut) */}
+        <HealthSync />
+
         {/* User info */}
         <Card>
           <div className="flex items-center gap-4 mb-4">
