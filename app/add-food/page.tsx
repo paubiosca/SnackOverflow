@@ -23,6 +23,10 @@ import type { BulkPantryInput } from '@/lib/db';
 // MealSection reads this exact string and renders the row distinctly.
 const CONSIDERING_MARKER = '__considering__';
 
+// Cap multi-photo bundles. Each high-detail image costs ~1k input tokens to
+// the vision model, so we keep this tight to avoid runaway analysis costs.
+const MAX_PHOTOS = 4;
+
 const formatDate = (date: Date): string => {
   const today = new Date();
   const yesterday = new Date(today);
@@ -59,7 +63,9 @@ export default function AddFood() {
   const [error, setError] = useState<string | null>(null);
   const [selectedMealType, setSelectedMealType] = useState<MealType>(suggestMealType());
   const [description, setDescription] = useState('');
-  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  // Up to MAX_PHOTOS images of the same meal (plate + label + drink, etc.).
+  // All are sent together to the vision model in a single analysis.
+  const [photoDataUrls, setPhotoDataUrls] = useState<string[]>([]);
   const [intent, setIntent] = useState<Intent>('eating');
   const [confirmation, setConfirmation] = useState<string | null>(null);
   // Tracks quick-added entries (suggestion chip taps) so the user can spot a
@@ -143,6 +149,15 @@ export default function AddFood() {
       setError('Image is too large. Please select an image under 10MB.');
       return;
     }
+    const appendPhoto = (url: string) => {
+      setPhotoDataUrls((prev) => {
+        if (prev.length >= MAX_PHOTOS) {
+          setError(`You can attach up to ${MAX_PHOTOS} photos per meal.`);
+          return prev;
+        }
+        return [...prev, url];
+      });
+    };
     const reader = new FileReader();
     reader.onloadend = () => {
       const result = reader.result as string;
@@ -164,11 +179,11 @@ export default function AddFood() {
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.drawImage(img, 0, 0, width, height);
-            setPhotoDataUrl(canvas.toDataURL('image/jpeg', 0.85));
+            appendPhoto(canvas.toDataURL('image/jpeg', 0.85));
             return;
           }
         }
-        setPhotoDataUrl(result);
+        appendPhoto(result);
       };
       img.onerror = () => setError('Failed to process image. Please try another file.');
       img.src = result;
@@ -225,17 +240,17 @@ export default function AddFood() {
     await remove(id);
   };
 
-  const canSubmit = (description.trim().length > 0 || photoDataUrl !== null);
+  const canSubmit = (description.trim().length > 0 || photoDataUrls.length > 0);
 
   const handleAdd = async () => {
     if (!canSubmit) return;
     setError(null);
 
-    const placeholder = description.trim() || (photoDataUrl ? 'Photo entry' : 'New entry');
+    const placeholder = description.trim() || (photoDataUrls.length > 1 ? `Photos (${photoDataUrls.length})` : photoDataUrls.length === 1 ? 'Photo entry' : 'New entry');
 
     const pending = await logAsync({
       description: description.trim() || undefined,
-      photoDataUrl: photoDataUrl || undefined,
+      photoDataUrls: photoDataUrls.length > 0 ? photoDataUrls : undefined,
       mealType: selectedMealType,
       date: getDateString(selectedDate),
     });
@@ -255,7 +270,7 @@ export default function AddFood() {
     }
 
     setDescription('');
-    setPhotoDataUrl(null);
+    setPhotoDataUrls([]);
     flashConfirmation(intent === 'curious' ? 'Saved for review' : 'Added — processing…');
   };
 
@@ -512,22 +527,28 @@ export default function AddFood() {
           </div>
 
           {/* Capture affordances */}
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            <button
-              onClick={() => cameraInputRef.current?.click()}
-              className="flex flex-col items-center justify-center p-4 bg-secondary-bg rounded-apple-lg border-2 border-dashed border-border-light hover:border-accent-blue active:bg-gray-100 transition-all touch-manipulation"
-            >
-              <Camera className="w-7 h-7 mb-1 text-accent-blue" />
-              <span className="text-sm font-medium text-text-primary">Take Photo</span>
-            </button>
-            <button
-              onClick={() => galleryInputRef.current?.click()}
-              className="flex flex-col items-center justify-center p-4 bg-secondary-bg rounded-apple-lg border-2 border-dashed border-border-light hover:border-accent-blue active:bg-gray-100 transition-all touch-manipulation"
-            >
-              <ImageIcon className="w-7 h-7 mb-1 text-accent-purple" />
-              <span className="text-sm font-medium text-text-primary">Choose Photo</span>
-            </button>
-          </div>
+          {photoDataUrls.length < MAX_PHOTOS && (
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <button
+                onClick={() => cameraInputRef.current?.click()}
+                className="flex flex-col items-center justify-center p-4 bg-secondary-bg rounded-apple-lg border-2 border-dashed border-border-light hover:border-accent-blue active:bg-gray-100 transition-all touch-manipulation"
+              >
+                <Camera className="w-7 h-7 mb-1 text-accent-blue" />
+                <span className="text-sm font-medium text-text-primary">
+                  {photoDataUrls.length === 0 ? 'Take Photo' : 'Add another'}
+                </span>
+              </button>
+              <button
+                onClick={() => galleryInputRef.current?.click()}
+                className="flex flex-col items-center justify-center p-4 bg-secondary-bg rounded-apple-lg border-2 border-dashed border-border-light hover:border-accent-blue active:bg-gray-100 transition-all touch-manipulation"
+              >
+                <ImageIcon className="w-7 h-7 mb-1 text-accent-purple" />
+                <span className="text-sm font-medium text-text-primary">
+                  {photoDataUrls.length === 0 ? 'Choose Photo' : 'Pick another'}
+                </span>
+              </button>
+            </div>
+          )}
 
           <input
             ref={cameraInputRef}
@@ -545,17 +566,30 @@ export default function AddFood() {
             className="hidden"
           />
 
-          {photoDataUrl && (
-            <div className="relative mb-3 rounded-apple-lg overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={photoDataUrl} alt="Selected food" className="w-full h-48 object-cover" />
-              <button
-                onClick={() => setPhotoDataUrl(null)}
-                className="absolute top-2 right-2 p-1.5 bg-black/50 rounded-full text-white hover:bg-black/70"
-                aria-label="Remove photo"
-              >
-                <X className="w-4 h-4" />
-              </button>
+          {photoDataUrls.length > 0 && (
+            <div className="mb-3 space-y-2">
+              <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1">
+                {photoDataUrls.map((url, idx) => (
+                  <div key={idx} className="relative shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt={`Selected food ${idx + 1}`}
+                      className="w-24 h-24 object-cover rounded-apple-lg"
+                    />
+                    <button
+                      onClick={() => setPhotoDataUrls((prev) => prev.filter((_, i) => i !== idx))}
+                      className="absolute -top-1.5 -right-1.5 p-1 bg-black/70 rounded-full text-white hover:bg-black"
+                      aria-label={`Remove photo ${idx + 1}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-text-secondary">
+                {photoDataUrls.length}/{MAX_PHOTOS} photos · all analyzed together as one meal.
+              </p>
             </div>
           )}
 

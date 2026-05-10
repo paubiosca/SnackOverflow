@@ -1,13 +1,21 @@
-// Three-stage AI pipeline for receipt → pantry. All stages use GPT-5.5.
-// Stage 1: vision OCR + line-item normalization from a receipt photo.
-// Stage 2: web-search-backed nutrition lookup for items OFF couldn't resolve.
-// Stage 3: a "judge" pass that flags individual items whose macros look wrong.
+// Three-stage AI pipeline for receipt → pantry. Cost-tuned: vision OCR and the
+// judge pass both run on gpt-5.4-mini (printed text + yes/no sanity checking
+// don't need a frontier model), and the web-lookup is BATCHED into a single
+// /v1/responses call so one receipt costs one $0.01 web_search call instead of
+// one per unmatched item.
 //
 // Stages 2 and 3 use OpenAI's Responses API with the built-in `web_search`
 // tool. The chat completions endpoint doesn't expose tools the same way, so
 // we hit /v1/responses directly.
 
 const OPENAI = 'https://api.openai.com';
+
+// Models — cheap-tier where quality permits. Receipt OCR is printed text and
+// the judge is a pure yes/no per row, so gpt-5.4-mini is more than enough.
+// The web-lookup also moves down a tier; we keep web_search for citations.
+const RECEIPT_OCR_MODEL = 'gpt-5.4-mini';
+const RECEIPT_LOOKUP_MODEL = 'gpt-5.4-mini';
+const RECEIPT_JUDGE_MODEL = 'gpt-5.4-mini';
 
 export interface ReceiptLineItem {
   rawText: string; // exactly as printed on the receipt (e.g. "M&S COOK SHANK HAM 220G")
@@ -74,7 +82,7 @@ export async function extractReceiptItems(
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: 'gpt-5.5',
+      model: RECEIPT_OCR_MODEL,
       messages: [
         { role: 'system', content: RECEIPT_SYSTEM },
         {
@@ -118,8 +126,104 @@ export interface WebNutrition {
   confidence: 'high' | 'medium' | 'low';
 }
 
-// We ask one item at a time so the model can cite a specific source URL per
-// product. Batched calls would be cheaper but harder to attribute.
+// Batched variant: one /v1/responses + web_search call for ALL unmatched items.
+// Saves $0.01 × (N-1) per scan where N is the unmatched-items count, and the
+// model can amortize the search content across queries. Per-item attribution
+// is preserved because we ask the model to return a keyed object.
+export async function lookupNutritionWithBrowsingBatch(
+  apiKey: string,
+  queries: Array<{ index: number; brand: string | null; name: string; packSize: string | null; store: string | null }>
+): Promise<Record<number, WebNutrition | null>> {
+  if (queries.length === 0) return {};
+  const lines = queries.map((q) =>
+    `[${q.index}] ${q.brand ?? 'unknown'} — ${q.name} (${q.packSize ?? 'unknown size'}) at ${q.store ?? 'unknown store'}`
+  );
+  const prompt = [
+    `Find nutrition information for the following supermarket products. Use web search (prefer the official store/product pages) and return ONLY strict JSON.`,
+    ``,
+    `Products:`,
+    ...lines,
+    ``,
+    `Return shape:`,
+    `{`,
+    `  "results": [`,
+    `    {`,
+    `      "index": <number from the list above>,`,
+    `      "kcal": <number>,           // per 100g for packaged food; per item only when sold as a count (eggs)`,
+    `      "protein": <number>,         // grams, same basis as kcal`,
+    `      "carbs": <number>,`,
+    `      "fat": <number>,`,
+    `      "unit": "g" | "item" | "ml",`,
+    `      "packGrams": <number | null>,`,
+    `      "citation": <string | null>, // url you used`,
+    `      "confidence": "high" | "medium" | "low"`,
+    `    }, ...`,
+    `  ]`,
+    `}`,
+    ``,
+    `Include one entry per index. If you cannot find reliable info, set confidence="low" and your best estimate. JSON only — no commentary or markdown.`,
+  ].join('\n');
+
+  // Receipt scans of 30+ items can take a while when web_search is iterating.
+  // 60s gives the tool enough room without holding the request open forever.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 60000);
+  let res: Response;
+  try {
+    res = await fetch(`${OPENAI}/v1/responses`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: RECEIPT_LOOKUP_MODEL,
+        tools: [{ type: 'web_search' }],
+        input: prompt,
+      }),
+      signal: ctrl.signal,
+    });
+  } catch {
+    clearTimeout(timer);
+    return {};
+  }
+  clearTimeout(timer);
+  if (!res.ok) return {};
+  const data = await res.json();
+  const text =
+    typeof data.output_text === 'string'
+      ? data.output_text
+      : (data.output ?? [])
+          .flatMap((o: { content?: Array<{ text?: string }> }) => o.content ?? [])
+          .map((c: { text?: string }) => c?.text)
+          .filter(Boolean)
+          .join('\n');
+  if (!text) return {};
+  const json = extractJson(text);
+  if (!json) return {};
+  try {
+    const parsed = JSON.parse(json) as { results: Array<Record<string, unknown>> };
+    const out: Record<number, WebNutrition | null> = {};
+    for (const r of parsed.results ?? []) {
+      const idx = Number(r.index);
+      if (!Number.isFinite(idx)) continue;
+      out[idx] = {
+        kcal: Number(r.kcal ?? 0),
+        protein: Number(r.protein ?? 0),
+        carbs: Number(r.carbs ?? 0),
+        fat: Number(r.fat ?? 0),
+        unit: ((r.unit as string) === 'item' || r.unit === 'ml' || r.unit === 'g' ? r.unit : 'g') as 'g' | 'item' | 'ml',
+        packGrams: r.packGrams != null ? Number(r.packGrams) : null,
+        source: 'web',
+        citation: (r.citation as string | null) ?? null,
+        confidence: ((r.confidence as string) === 'high' || r.confidence === 'medium' ? r.confidence : 'low') as 'high' | 'medium' | 'low',
+      };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+// Single-item variant — kept for callers that want per-item attribution and
+// are OK paying $0.01 per call. New code should prefer the batch version.
 export async function lookupNutritionWithBrowsing(
   apiKey: string,
   query: { brand: string | null; name: string; packSize: string | null; store: string | null }
@@ -156,7 +260,7 @@ export async function lookupNutritionWithBrowsing(
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: 'gpt-5.5',
+        model: RECEIPT_LOOKUP_MODEL,
         tools: [{ type: 'web_search' }],
         input: prompt,
       }),
@@ -241,7 +345,7 @@ export async function judgeNutrition(
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: 'gpt-5.5',
+      model: RECEIPT_JUDGE_MODEL,
       messages: [
         { role: 'system', content: JUDGE_SYSTEM },
         { role: 'user', content: JSON.stringify(enumerated) },

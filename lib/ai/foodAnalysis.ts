@@ -45,6 +45,10 @@ const SCHEMA = {
       additionalProperties: false,
     },
     overall_confidence: { type: 'integer' },
+    rationale: {
+      type: 'string',
+      description: 'Plain-language explanation (1-3 sentences) of how the estimate was derived: what you saw, key assumptions, and which component drove the calorie count.',
+    },
     clarifying_questions: {
       type: 'array',
       items: {
@@ -72,7 +76,7 @@ const SCHEMA = {
       },
     },
   },
-  required: ['dish_name', 'components', 'total_nutrition', 'overall_confidence', 'clarifying_questions'],
+  required: ['dish_name', 'components', 'total_nutrition', 'overall_confidence', 'rationale', 'clarifying_questions'],
   additionalProperties: false,
 } as const;
 
@@ -88,6 +92,10 @@ When analyzing food:
 Always use grams (g), milliliters (ml), or count units. Never cups, tablespoons, or ounces.
 Round all numbers to integers.
 
+If multiple images are provided, treat them as different angles or supplementary views of the SAME meal (e.g. plate + nutrition label + drink). Use them together to refine the estimate, not as separate dishes.
+
+In the rationale field, write 1-3 short sentences explaining how you arrived at the estimate: what you saw, the key portion assumption, and which component drives the calorie count. Plain language, no markdown.
+
 Clarifying questions (when used):
 - SHORT (under 15 words). Option labels short (3-5 words).
 - 0-1 questions only. Skip if confidence is high (>=80).
@@ -97,13 +105,15 @@ Clarifying questions (when used):
 export interface FoodAnalysisInput {
   apiKey: string;
   description?: string;        // user's text description
-  photoDataUrl?: string;       // base64 data URL for image analysis
+  photoDataUrl?: string;       // base64 data URL for image analysis (legacy single)
+  photoDataUrls?: string[];    // multiple photos of the same meal (preferred over photoDataUrl)
   additionalContext?: string;  // free-text comment from the user
   priorAnswer?: string;        // user's response to a previous clarifying question
 }
 
 export interface FoodAnalysisResult {
   dishName: string;
+  rationale: string;
   components: Array<{
     name: string;
     brand: string | null;
@@ -123,15 +133,26 @@ export interface FoodAnalysisResult {
 }
 
 export async function analyzeFood(input: FoodAnalysisInput): Promise<FoodAnalysisResult> {
-  if (!input.description && !input.photoDataUrl) {
-    throw new Error('analyzeFood requires either description or photoDataUrl');
+  // Normalize photo input. Callers may pass a single `photoDataUrl` (legacy)
+  // and/or a `photoDataUrls` array; we de-dupe and treat them as one bundle.
+  const photoBundle = Array.from(
+    new Set([
+      ...(input.photoDataUrl ? [input.photoDataUrl] : []),
+      ...(input.photoDataUrls ?? []),
+    ])
+  );
+
+  if (!input.description && photoBundle.length === 0) {
+    throw new Error('analyzeFood requires either description or at least one photo');
   }
 
-  let userPrompt = input.photoDataUrl
-    ? 'Analyze this food image. Break it into components with nutrition info.'
+  let userPrompt = photoBundle.length > 0
+    ? (photoBundle.length === 1
+        ? 'Analyze this food image. Break it into components with nutrition info.'
+        : `Analyze these ${photoBundle.length} food images of the same meal. Use all of them together (different angles, labels, sides) to estimate one combined breakdown.`)
     : `Analyze this food and break it into components: "${input.description}"`;
 
-  if (input.description && input.photoDataUrl) {
+  if (input.description && photoBundle.length > 0) {
     userPrompt += `\n\nUser's description of the meal: "${input.description}"`;
   }
   if (input.additionalContext?.trim()) {
@@ -141,10 +162,13 @@ export async function analyzeFood(input: FoodAnalysisInput): Promise<FoodAnalysi
     userPrompt += `\n\nThe user just answered a clarifying question: "${input.priorAnswer}"\nUse this answer to refine your estimate. Do NOT ask another clarifying question unless absolutely necessary.`;
   }
 
-  const userContent = input.photoDataUrl
+  const userContent = photoBundle.length > 0
     ? [
         { type: 'text', text: userPrompt },
-        { type: 'image_url', image_url: { url: input.photoDataUrl, detail: 'high' } },
+        ...photoBundle.map((url) => ({
+          type: 'image_url',
+          image_url: { url, detail: 'high' },
+        })),
       ]
     : userPrompt;
 
@@ -155,7 +179,11 @@ export async function analyzeFood(input: FoodAnalysisInput): Promise<FoodAnalysi
       Authorization: `Bearer ${input.apiKey}`,
     },
     body: JSON.stringify({
-      model: 'gpt-5.5',
+      // gpt-5.4 keeps the previous-gen frontier reasoning quality at half the
+      // cost of 5.5 ($2.50/$15 vs $5/$30 per 1M). Vision tokenization is the
+      // same patch-based scheme, so multi-photo cost scales linearly without
+      // the 5.5 premium.
+      model: 'gpt-5.4',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userContent },
@@ -183,6 +211,7 @@ export async function analyzeFood(input: FoodAnalysisInput): Promise<FoodAnalysi
   const parsed = JSON.parse(content);
   return {
     dishName: parsed.dish_name,
+    rationale: parsed.rationale ?? '',
     components: parsed.components.map((c: any) => ({
       name: c.name,
       brand: c.brand,

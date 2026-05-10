@@ -81,12 +81,23 @@ export default function WeekStats({ days, targetDeficit }: Props) {
       {/* Weight projections. In WeekStats, `avg` = mean(TDEE − consumed),
           so positive avg = real deficit = body-mass LOSS. Body-mass change is
           the OPPOSITE sign: weightChange = consumed − TDEE = −avg.
-          7700 kcal ≈ 1 kg fat. */}
-      {logged.length >= 3 && (() => {
-        const weeklyKg = (-avg * 7) / 7700;   // + = gained, − = lost
-        const monthlyKg = (-avg * 30) / 7700;
+          7700 kcal ≈ 1 kg fat.
+          We exclude TODAY from the projection unless it's late evening, since
+          a half-eaten day pulls the avg toward "huge deficit" and lies. */}
+      {(() => {
+        // Drop today from the projection unless it's late evening (≥21:00),
+        // since a half-eaten day skews the avg toward "huge deficit". Need at
+        // least 2 fully-logged days for any projection to render.
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const isEvening = new Date().getHours() >= 21;
+        const projectionLogged = logged.filter((d) => isEvening ? true : d.date !== todayStr);
+        if (projectionLogged.length < 2) return null;
+        const projAvg = Math.round(
+          projectionLogged.reduce((s, d) => s + (d.goal - d.consumed), 0) / projectionLogged.length
+        );
+        const weeklyKg = (-projAvg * 7) / 7700;
+        const monthlyKg = (-projAvg * 30) / 7700;
         const fmt = (kg: number) => {
-          // kg > 0 → gained → '+' red. kg < 0 → lost → '−' green.
           const sign = kg > 0 ? '+' : kg < 0 ? '−' : '';
           const tone = kg > 0 ? 'text-accent-red' : kg < 0 ? 'text-accent-green' : 'text-text-primary';
           const abs = Math.abs(kg);

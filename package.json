@@ -12,6 +12,7 @@
     "db:remove-backfill": "tsx scripts/remove-backfill.ts"
   },
   "dependencies": {
+    "@types/pg": "^8.20.0",
     "@vercel/postgres": "^0.10.0",
     "bcryptjs": "^3.0.3",
     "dotenv": "16.6.1",
@@ -19,6 +20,7 @@
     "lucide-react": "^0.562.0",
     "next": "14.2.21",
     "next-auth": "^5.0.0-beta.30",
+    "pg": "^8.20.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "saxes": "^6.0.0",

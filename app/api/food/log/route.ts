@@ -23,9 +23,10 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { description, photoDataUrl, mealType, date, additionalContext, consumedAt } = body as {
+  const { description, photoDataUrl, photoDataUrls, mealType, date, additionalContext, consumedAt } = body as {
     description?: string;
     photoDataUrl?: string;
+    photoDataUrls?: string[];
     mealType?: MealType;
     date?: string;
     additionalContext?: string;
@@ -35,13 +36,25 @@ export async function POST(request: NextRequest) {
   if (!mealType || !date) {
     return NextResponse.json({ error: 'mealType and date are required' }, { status: 400 });
   }
-  if (!description?.trim() && !photoDataUrl) {
-    return NextResponse.json({ error: 'description or photoDataUrl required' }, { status: 400 });
+
+  // Normalize photos: accept either single legacy field or array. First one
+  // becomes the cover (`photo_url`); the rest go into `photo_urls`.
+  const photos = [
+    ...(photoDataUrl ? [photoDataUrl] : []),
+    ...(Array.isArray(photoDataUrls) ? photoDataUrls.filter((u) => typeof u === 'string' && u) : []),
+  ];
+  // De-dupe in case caller sent both photoDataUrl and photoDataUrls[0].
+  const uniquePhotos = Array.from(new Set(photos));
+  const coverPhoto = uniquePhotos[0];
+  const extraPhotos = uniquePhotos.slice(1);
+
+  if (!description?.trim() && uniquePhotos.length === 0) {
+    return NextResponse.json({ error: 'description or photo required' }, { status: 400 });
   }
 
   // Use the typed input as the placeholder name. The worker will overwrite it
   // with the parsed dish name on resolve.
-  const placeholderName = description?.trim() || 'Photo';
+  const placeholderName = description?.trim() || (uniquePhotos.length > 1 ? `Photos (${uniquePhotos.length})` : 'Photo');
 
   const entry = await addFoodEntry(session.user.id, {
     name: placeholderName,
@@ -49,11 +62,12 @@ export async function POST(request: NextRequest) {
     date,
     consumedAt,
     status: 'pending',
-    source: photoDataUrl ? 'analyze-photo' : 'analyze-text',
+    source: coverPhoto ? 'analyze-photo' : 'analyze-text',
     isManualEntry: false,
     inputDescription: description?.trim(),
     additionalContext: additionalContext?.trim(),
-    photoUrl: photoDataUrl,
+    photoUrl: coverPhoto,
+    photoUrls: extraPhotos.length > 0 ? extraPhotos : undefined,
   });
 
   return NextResponse.json({ entry });

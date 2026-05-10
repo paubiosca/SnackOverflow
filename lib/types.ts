@@ -34,6 +34,24 @@ export interface ClarifyingSuggestion {
   value: string;
 }
 
+export interface FoodAnalysisComponent {
+  name: string;
+  brand?: string | null;
+  portionDisplay: string;
+  portionGrams?: number | null;
+  nutrition: { calories: number; protein: number; carbs: number; fat: number };
+  confidence: number;
+}
+
+// Persisted breakdown so users can tap a logged meal and see the AI's reasoning.
+export interface FoodAnalysisBreakdown {
+  dishName: string;
+  rationale?: string; // 1-3 sentence plain-text explanation
+  components: FoodAnalysisComponent[];
+  totals: { calories: number; protein: number; carbs: number; fat: number };
+  confidence: number;
+}
+
 export interface FoodEntry {
   id: string;
   name: string;
@@ -61,8 +79,10 @@ export interface FoodEntry {
   clarifyingSuggestions?: ClarifyingSuggestion[];
   clarifyingAnswer?: string;
   pantryItemId?: string;
-  photoUrl?: string;
+  photoUrl?: string;          // primary/cover photo
+  photoUrls?: string[];       // additional photos (excluding `photoUrl`)
   notes?: string;
+  analysis?: FoodAnalysisBreakdown; // populated once the worker resolves the entry
   // Worker inputs (immutable; the LLM reads these to compute the analysis).
   inputDescription?: string;
   additionalContext?: string;

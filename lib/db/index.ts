@@ -1,5 +1,5 @@
 import { sql } from '@vercel/postgres';
-import { FoodEntry, FoodEntryStatus, FoodEntrySource, FoodSuggestion, PantryItem, WaterLog, WeightLog, UserProfile, MealType, ActivityApproach, ClarifyingSuggestion } from '../types';
+import { FoodEntry, FoodEntryStatus, FoodEntrySource, FoodSuggestion, PantryItem, WaterLog, WeightLog, UserProfile, MealType, ActivityApproach, ClarifyingSuggestion, FoodAnalysisBreakdown } from '../types';
 
 // IMPORTANT: every SELECT that returns a Postgres `DATE` column must wrap it
 // in TO_CHAR(date, 'YYYY-MM-DD'). The Neon driver (under @vercel/postgres)
@@ -29,6 +29,8 @@ const FOOD_ENTRY_COLUMNS = `
   clarifying_answer as "clarifyingAnswer",
   pantry_item_id as "pantryItemId",
   photo_url as "photoUrl",
+  photo_urls as "photoUrls",
+  analysis_json as "analysis",
   input_description as "inputDescription",
   additional_context as "additionalContext",
   created_at as "createdAt"
@@ -60,6 +62,8 @@ function rowToFoodEntry(row: any): FoodEntry {
     clarifyingAnswer: row.clarifyingAnswer ?? undefined,
     pantryItemId: row.pantryItemId ?? undefined,
     photoUrl: row.photoUrl ?? undefined,
+    photoUrls: Array.isArray(row.photoUrls) ? row.photoUrls : undefined,
+    analysis: row.analysis ?? undefined,
     inputDescription: row.inputDescription ?? undefined,
     additionalContext: row.additionalContext ?? undefined,
     createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : undefined,
@@ -240,7 +244,7 @@ export async function addFoodEntry(userId: string, entry: Partial<FoodEntry> & P
        ai_estimated_calories, ai_estimated_protein, ai_estimated_carbs, ai_estimated_fat,
        status, source,
        clarifying_question, clarifying_suggestions, clarifying_answer,
-       pantry_item_id, photo_url,
+       pantry_item_id, photo_url, photo_urls,
        input_description, additional_context
      ) VALUES (
        $1, $2, $3, $4, $5,
@@ -249,8 +253,8 @@ export async function addFoodEntry(userId: string, entry: Partial<FoodEntry> & P
        $12, $13, $14, $15,
        $16, $17,
        $18, $19::jsonb, $20,
-       $21, $22,
-       $23, $24
+       $21, $22, $23::jsonb,
+       $24, $25
      )
      RETURNING ${FOOD_ENTRY_COLUMNS}`,
     [
@@ -261,6 +265,7 @@ export async function addFoodEntry(userId: string, entry: Partial<FoodEntry> & P
       status, source,
       entry.clarifyingQuestion ?? null, entry.clarifyingSuggestions ? JSON.stringify(entry.clarifyingSuggestions) : null, entry.clarifyingAnswer ?? null,
       entry.pantryItemId ?? null, entry.photoUrl ?? null,
+      entry.photoUrls && entry.photoUrls.length > 0 ? JSON.stringify(entry.photoUrls) : null,
       entry.inputDescription ?? null, entry.additionalContext ?? null,
     ]
   );
@@ -344,6 +349,7 @@ export async function resolveFoodEntry(userId: string, id: string, data: {
   fat: number;
   aiConfidence?: number;
   aiEstimated?: { calories: number; protein: number; carbs: number; fat: number };
+  analysis?: FoodAnalysisBreakdown;
 }): Promise<FoodEntry | null> {
   const ai = data.aiEstimated ?? { calories: data.calories, protein: data.protein, carbs: data.carbs, fat: data.fat };
   const result = await sql.query(
@@ -355,17 +361,19 @@ export async function resolveFoodEntry(userId: string, id: string, data: {
        ai_estimated_protein = COALESCE(ai_estimated_protein, $8),
        ai_estimated_carbs = COALESCE(ai_estimated_carbs, $9),
        ai_estimated_fat = COALESCE(ai_estimated_fat, $10),
+       analysis_json = COALESCE($11::jsonb, analysis_json),
        status = 'resolved',
        clarifying_question = NULL,
        clarifying_suggestions = NULL,
        updated_at = NOW()
-     WHERE id = $11 AND user_id = $12
+     WHERE id = $12 AND user_id = $13
      RETURNING ${FOOD_ENTRY_COLUMNS}`,
     [
       data.name ?? null,
       data.calories, data.protein, data.carbs, data.fat,
       data.aiConfidence ?? null,
       ai.calories, ai.protein, ai.carbs, ai.fat,
+      data.analysis ? JSON.stringify(data.analysis) : null,
       id, userId,
     ]
   );
@@ -377,6 +385,7 @@ export async function markFoodEntryNeedsClarification(userId: string, id: string
   suggestions: ClarifyingSuggestion[];
   // Optional preliminary estimate so the card can show a "best guess" while pending an answer
   preliminary?: { calories: number; protein: number; carbs: number; fat: number; confidence?: number };
+  analysis?: FoodAnalysisBreakdown;
 }): Promise<FoodEntry | null> {
   const p = data.preliminary;
   const result = await sql.query(
@@ -393,14 +402,16 @@ export async function markFoodEntryNeedsClarification(userId: string, id: string
        ai_estimated_protein = COALESCE(ai_estimated_protein, $4),
        ai_estimated_carbs = COALESCE(ai_estimated_carbs, $5),
        ai_estimated_fat = COALESCE(ai_estimated_fat, $6),
+       analysis_json = COALESCE($8::jsonb, analysis_json),
        updated_at = NOW()
-     WHERE id = $8 AND user_id = $9
+     WHERE id = $9 AND user_id = $10
      RETURNING ${FOOD_ENTRY_COLUMNS}`,
     [
       data.question,
       JSON.stringify(data.suggestions),
       p?.calories ?? null, p?.protein ?? null, p?.carbs ?? null, p?.fat ?? null,
       p?.confidence ?? null,
+      data.analysis ? JSON.stringify(data.analysis) : null,
       id, userId,
     ]
   );

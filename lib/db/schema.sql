@@ -149,6 +149,14 @@ ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS source VARCHAR(32) NOT NULL DE
 ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS pantry_item_id UUID REFERENCES pantry_items(id) ON DELETE SET NULL;
 ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS input_description TEXT;
 ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS additional_context TEXT;
+-- Persisted AI breakdown so the user can tap an entry later and see how the
+-- calories were estimated: { rationale, components: [...], totals, confidence }.
+-- Written by the worker on resolve and on needs_clarification.
+ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS analysis_json JSONB;
+-- Additional photos beyond the primary `photo_url` (e.g. plate + nutrition
+-- label + drink). Array of base64 data URLs. Worker passes all of them to the
+-- vision model in one analysis.
+ALTER TABLE food_entries ADD COLUMN IF NOT EXISTS photo_urls JSONB;
 
 -- Calibrated baseline TDEE in kcal/day. Represents the user's typical daily
 -- burn EXCLUDING tracked workouts (so just BMR + walking + incidental movement).

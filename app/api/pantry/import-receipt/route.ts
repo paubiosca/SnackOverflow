@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { getProfile } from '@/lib/db';
-import { extractReceiptItems, lookupNutritionWithBrowsing, judgeNutrition } from '@/lib/ai/receiptScan';
+import { extractReceiptItems, lookupNutritionWithBrowsingBatch, judgeNutrition } from '@/lib/ai/receiptScan';
 import { lookupOpenFoodFacts } from '@/lib/nutrition/openFoodFacts';
 
 // Receipt → enriched line items, ready for the user to review and confirm.
@@ -74,26 +74,22 @@ export async function POST(request: NextRequest) {
     items.map((it) => lookupOpenFoodFacts([it.brand, it.normalizedName].filter(Boolean).join(' ')))
   );
 
-  // Stage 3: GPT browsing for items OFF missed. Parallel with a concurrency
-  // cap so we don't hammer OpenAI; per-call timeout in `lookupNutritionWithBrowsing`
-  // means a single slow item can't stall the whole pipeline.
-  const CONCURRENCY = 6;
+  // Stage 3: GPT browsing for items OFF missed. ONE batched call instead of
+  // one per item — saves a $0.01 web_search call per unmatched item, which
+  // dominated cost on 30+ item receipts.
   const missingIdx = items.map((_, i) => i).filter((i) => !offResults[i]);
-  const webResults: Record<number, Awaited<ReturnType<typeof lookupNutritionWithBrowsing>>> = {};
-  for (let start = 0; start < missingIdx.length; start += CONCURRENCY) {
-    const slice = missingIdx.slice(start, start + CONCURRENCY);
-    await Promise.all(
-      slice.map(async (i) => {
-        const item = items[i];
-        webResults[i] = await lookupNutritionWithBrowsing(profile.openaiApiKey!, {
-          brand: item.brand,
-          name: item.normalizedName,
-          packSize: item.packSize,
-          store: item.store,
-        });
-      })
-    );
-  }
+  const webResults = missingIdx.length === 0
+    ? {}
+    : await lookupNutritionWithBrowsingBatch(
+        profile.openaiApiKey,
+        missingIdx.map((i) => ({
+          index: i,
+          brand: items[i].brand,
+          name: items[i].normalizedName,
+          packSize: items[i].packSize,
+          store: items[i].store,
+        }))
+      );
 
   const enriched: EnrichedItem[] = items.map((item, i) => {
     const off = offResults[i];

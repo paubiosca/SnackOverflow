@@ -105,6 +105,7 @@ export function useFoodEntries(date?: string) {
   const logAsync = useCallback(async (input: {
     description?: string;
     photoDataUrl?: string;
+    photoDataUrls?: string[];
     mealType: MealType;
     date?: string;
     additionalContext?: string;

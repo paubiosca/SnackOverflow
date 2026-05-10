@@ -48,12 +48,20 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       apiKey,
       description: entry.inputDescription,
       photoDataUrl: entry.photoUrl,
+      photoDataUrls: entry.photoUrls,
       additionalContext: entry.additionalContext,
       priorAnswer: entry.clarifyingAnswer,
     });
 
     const totals = result.totalNutrition;
     const firstQuestion = result.clarifyingQuestions[0];
+    const breakdown = {
+      dishName: result.dishName,
+      rationale: result.rationale,
+      components: result.components,
+      totals,
+      confidence: result.overallConfidence,
+    };
 
     if (firstQuestion && result.overallConfidence < 85) {
       // Show the preliminary estimate while asking the question — user sees a "best guess"
@@ -68,6 +76,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
           fat: totals.fat,
           confidence: result.overallConfidence,
         },
+        analysis: breakdown,
       });
       return NextResponse.json({ entry: updated });
     }
@@ -80,6 +89,7 @@ export async function POST(_request: NextRequest, { params }: { params: { id: st
       fat: totals.fat,
       aiConfidence: result.overallConfidence,
       aiEstimated: totals,
+      analysis: breakdown,
     });
     return NextResponse.json({ entry: updated });
   } catch (err) {
