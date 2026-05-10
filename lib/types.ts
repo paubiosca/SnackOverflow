@@ -98,6 +98,22 @@ export interface FoodSuggestion {
   lastEatenAt?: string;
 }
 
+export interface FoodAlternative {
+  name: string;
+  calories: number;
+  savedKcal: number;
+  source: 'history' | 'ai';
+  occurrences?: number;
+  lastEatenAt?: string;
+}
+
+export interface AlternativeSuggestion {
+  originalEntryId: string;
+  originalName: string;
+  originalCalories: number;
+  alternatives: FoodAlternative[];
+}
+
 export interface WaterLog {
   id: string;
   date: string;
@@ -171,54 +187,6 @@ export const MEAL_ICONS: Record<MealType, string> = {
   lunch: '☀️',
   dinner: '🌙',
   snack: '🍿',
-};
-
-// Recipe & Ingredient Types
-export type IngredientCategory = 'protein' | 'vegetable' | 'fruit' | 'grain' | 'dairy' | 'fat' | 'seasoning' | 'other';
-
-export interface Ingredient {
-  id: string;
-  name: string;
-  amount: string;
-  category: IngredientCategory;
-}
-
-export interface RecipeNutrition {
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  servings: number;
-}
-
-export interface Recipe {
-  id: string;
-  name: string;
-  description: string;
-  prepTime: string;
-  difficulty: 'easy' | 'medium' | 'hard';
-  ingredientsUsed: string[];
-  instructions: string[];
-  nutrition: RecipeNutrition;
-  tags?: string[];
-}
-
-export interface MacroBudget {
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-}
-
-export const INGREDIENT_CATEGORY_LABELS: Record<IngredientCategory, string> = {
-  protein: 'Protein',
-  vegetable: 'Vegetables',
-  fruit: 'Fruit',
-  grain: 'Grains',
-  dairy: 'Dairy',
-  fat: 'Fats & Oils',
-  seasoning: 'Seasonings',
-  other: 'Other',
 };
 
 // Onboarding Chat Types

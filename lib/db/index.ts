@@ -464,6 +464,52 @@ export async function getFoodSuggestions(userId: string, opts?: { limit?: number
   }));
 }
 
+// History of resolved entries grouped by lower(name) within an optional mealType filter,
+// from the last `days` days. Used by the alternatives endpoint to find leaner swaps the
+// user has actually eaten before.
+export interface HistoryItem {
+  name: string;
+  mealType: MealType;
+  avgCalories: number;
+  minCalories: number;
+  occurrences: number;
+  lastEatenAt?: string;
+}
+
+export async function getFoodHistoryByMealType(
+  userId: string,
+  mealType: MealType,
+  days: number = 60,
+): Promise<HistoryItem[]> {
+  const result = await sql.query(
+    `SELECT
+       name,
+       meal_type AS "mealType",
+       AVG(calories)::float AS "avgCalories",
+       MIN(calories)::float AS "minCalories",
+       COUNT(*)::int AS occurrences,
+       MAX(consumed_at) AS "lastEatenAt"
+     FROM food_entries
+     WHERE user_id = $1
+       AND status = 'resolved'
+       AND meal_type = $2
+       AND calories > 0
+       AND (consumed_at IS NULL OR consumed_at >= NOW() - ($3 || ' days')::interval)
+     GROUP BY LOWER(name), name, meal_type
+     ORDER BY occurrences DESC, MAX(consumed_at) DESC NULLS LAST`,
+    [userId, mealType, String(days)],
+  );
+
+  return result.rows.map((row) => ({
+    name: row.name,
+    mealType: row.mealType as MealType,
+    avgCalories: Number(row.avgCalories) || 0,
+    minCalories: Number(row.minCalories) || 0,
+    occurrences: Number(row.occurrences) || 0,
+    lastEatenAt: row.lastEatenAt ? new Date(row.lastEatenAt).toISOString() : undefined,
+  }));
+}
+
 // Pantry operations
 export async function getActivePantryItems(userId: string): Promise<PantryItem[]> {
   const result = await sql`

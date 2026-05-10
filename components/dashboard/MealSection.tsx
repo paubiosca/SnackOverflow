@@ -3,8 +3,15 @@
 import { useMemo } from 'react';
 import { FoodEntry, MealType, MEAL_LABELS } from '@/lib/types';
 import Card from '@/components/ui/Card';
-import { Sunrise, Sun, Moon, Cookie, Trash2, ChevronDown, ChevronUp, Loader2, AlertCircle, XCircle } from 'lucide-react';
+import { Sunrise, Sun, Moon, Cookie, Trash2, ChevronDown, ChevronUp, Loader2, AlertCircle, XCircle, Utensils } from 'lucide-react';
 import { ReactNode, useState } from 'react';
+
+// Sentinel value the add-food page writes into `notes` for "Just curious"
+// entries. Used here to render the row visually distinct (dashed/faded) and
+// expose Eat-it / Discard inline actions. We piggy-back on `notes` because
+// the schema has no separate enum value for this state.
+const CONSIDERING_MARKER = '__considering__';
+const isConsidering = (e: FoodEntry) => e.notes === CONSIDERING_MARKER;
 
 // Visual indicator for the async lifecycle of an entry. The "where" is
 // deliberate: the dot lives on the food card itself (Apple/iMessage-style),
@@ -36,6 +43,7 @@ interface MealSectionProps {
   onDelete: (id: string) => void;
   onEdit?: (entry: FoodEntry) => void;
   onClarify?: (entry: FoodEntry) => void;
+  onUpdate?: (id: string, updates: Partial<FoodEntry>) => void;
 }
 
 // Group entries that were logged within 30 minutes of each other
@@ -81,6 +89,7 @@ interface MealGroupProps {
   onDelete: (id: string) => void;
   onEdit?: (entry: FoodEntry) => void;
   onClarify?: (entry: FoodEntry) => void;
+  onUpdate?: (id: string, updates: Partial<FoodEntry>) => void;
   isExpanded: boolean;
   onToggle: () => void;
 }
@@ -101,7 +110,7 @@ function handleEntryTap(
   onEdit?.(entry);
 }
 
-function MealGroup({ entries, onDelete, onEdit, onClarify, isExpanded, onToggle }: MealGroupProps) {
+function MealGroup({ entries, onDelete, onEdit, onClarify, onUpdate, isExpanded, onToggle }: MealGroupProps) {
   const groupCalories = entries.reduce((sum, e) => sum + e.calories, 0);
   const groupProtein = entries.reduce((sum, e) => sum + e.protein, 0);
   const groupCarbs = entries.reduce((sum, e) => sum + e.carbs, 0);
@@ -122,17 +131,29 @@ function MealGroup({ entries, onDelete, onEdit, onClarify, isExpanded, onToggle 
     const status = entry.status ?? 'resolved';
     const isPending = status === 'pending';
     const isFailed = status === 'failed';
+    const considering = isConsidering(entry);
     const tapAction = status === 'needs_clarification' ? 'Tap to refine' : null;
     return (
       <div
-        className="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors group cursor-pointer"
+        className={`flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors group cursor-pointer ${
+          considering ? 'opacity-60 border-2 border-dashed border-border-light rounded-apple m-1' : ''
+        }`}
         onClick={() => handleEntryTap(entry, onEdit, onClarify)}
       >
         <div className="flex-1 min-w-0 flex items-center gap-2">
           <StatusDot entry={entry} />
           <div className="min-w-0">
-            <p className={`font-medium truncate ${isPending || isFailed ? 'text-text-secondary' : 'text-text-primary'}`}>
+            <p
+              className={`font-medium truncate ${
+                considering ? 'text-text-secondary line-through' : isPending || isFailed ? 'text-text-secondary' : 'text-text-primary'
+              }`}
+            >
               {entry.name}
+              {considering && (
+                <span className="ml-2 align-middle inline-block text-[10px] uppercase tracking-wide font-semibold px-2 py-0.5 rounded-full bg-accent-purple/10 text-accent-purple no-underline">
+                  Considering
+                </span>
+              )}
             </p>
             <p className="text-xs text-text-secondary">
               {isPending ? (
@@ -149,19 +170,40 @@ function MealGroup({ entries, onDelete, onEdit, onClarify, isExpanded, onToggle 
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {!isPending && (
+        <div className="flex items-center gap-2">
+          {considering && onUpdate && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onUpdate(entry.id, { notes: '' }); }}
+              className="text-xs font-medium text-accent-green px-2 py-1 rounded-apple hover:bg-green-50 active:bg-green-100 touch-manipulation flex items-center gap-1"
+              aria-label="Eat it"
+            >
+              <Utensils className="w-3.5 h-3.5" />
+              Eat it
+            </button>
+          )}
+          {considering && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
+              className="text-xs font-medium text-accent-red px-2 py-1 rounded-apple hover:bg-red-50 active:bg-red-100 touch-manipulation"
+              aria-label="Discard"
+            >
+              Discard
+            </button>
+          )}
+          {!isPending && !considering && (
             <span className={`text-sm font-semibold ${status === 'needs_clarification' ? 'text-text-secondary' : 'text-text-primary'}`}>
               {entry.calories} kcal
             </span>
           )}
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
-            className="opacity-0 group-hover:opacity-100 transition-opacity text-accent-red p-1 touch-manipulation"
-            aria-label="Delete entry"
-          >
-            <Trash2 className="w-5 h-5" />
-          </button>
+          {!considering && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(entry.id); }}
+              className="opacity-0 group-hover:opacity-100 transition-opacity text-accent-red p-1 touch-manipulation"
+              aria-label="Delete entry"
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+          )}
         </div>
       </div>
     );
@@ -236,7 +278,7 @@ function MealGroup({ entries, onDelete, onEdit, onClarify, isExpanded, onToggle 
   );
 }
 
-export default function MealSection({ mealType, entries, onDelete, onEdit, onClarify }: MealSectionProps) {
+export default function MealSection({ mealType, entries, onDelete, onEdit, onClarify, onUpdate }: MealSectionProps) {
   const totalCalories = entries.reduce((sum, e) => sum + e.calories, 0);
   const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
 
@@ -281,6 +323,7 @@ export default function MealSection({ mealType, entries, onDelete, onEdit, onCla
               onDelete={onDelete}
               onEdit={onEdit}
               onClarify={onClarify}
+              onUpdate={onUpdate}
               isExpanded={expandedGroups.has(index)}
               onToggle={() => toggleGroup(index)}
             />

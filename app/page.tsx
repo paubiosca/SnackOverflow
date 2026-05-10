@@ -20,6 +20,7 @@ import WeeklyDeficitChart from '@/components/dashboard/WeeklyDeficitChart';
 import EditFoodModal from '@/components/food/EditFoodModal';
 import ClarifySheet from '@/components/food/ClarifySheet';
 import BurnedCaloriesTile from '@/components/dashboard/BurnedCaloriesTile';
+import AlternativesCard from '@/components/food/AlternativesCard';
 
 // Helper to get local date string
 const getLocalDateString = (): string => {
@@ -115,6 +116,9 @@ export default function Dashboard() {
         {/* Weekly Deficit Chart */}
         <WeeklyDeficitChart baseCalorieGoal={calorieGoal} />
 
+        {/* Leaner alternatives based on today's heavier items */}
+        <AlternativesCard />
+
         {/* Water Tracker */}
         <WaterTracker goalMl={profile?.dailyWaterGoalMl || 2000} />
 
@@ -136,6 +140,7 @@ export default function Dashboard() {
             onDelete={remove}
             onEdit={setEditingEntry}
             onClarify={setClarifyingEntry}
+            onUpdate={update}
           />
         ))}
       </div>
