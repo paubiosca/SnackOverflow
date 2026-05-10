@@ -125,7 +125,6 @@ export default function History() {
     });
   }, [window, entriesByDate, activityByDate, baseline]);
 
-  const last7 = useMemo(() => days.slice(-Math.min(7, days.length)), [days]);
 
   const selectedEntries = selectedDate ? entriesByDate[selectedDate] || [] : [];
   const selectedTotals = calculateDailyTotals(selectedEntries);
