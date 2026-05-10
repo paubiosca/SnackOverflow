@@ -104,6 +104,9 @@ export default function AddFood() {
   // Pantry chip portion picker. Opens the bottom-sheet when a pantry chip
   // is tapped so the user can pick "half / whole / 100g / etc.".
   const [portionItem, setPortionItem] = useState<FoodSuggestion | null>(null);
+  // Tap on a just-added row to refine the entry — append a free-text note,
+  // re-trigger the worker, no photo re-upload needed.
+  const [refiningEntry, setRefiningEntry] = useState<FoodEntry | null>(null);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -377,42 +380,55 @@ export default function AddFood() {
               </button>
             </div>
             <ul className="space-y-1.5">
-              {recentlyAdded.map((r) => (
-                <li
-                  key={r.id}
-                  className={`flex items-center gap-2 px-3 py-2 bg-white rounded-apple border ${
-                    r.failed ? 'border-red-200' : r.pending ? 'border-blue-100' : 'border-green-100'
-                  }`}
-                >
-                  {r.failed ? (
-                    <AlertTriangle className="w-4 h-4 text-accent-red shrink-0" />
-                  ) : r.pending ? (
-                    <Loader2 className="w-4 h-4 text-accent-blue animate-spin shrink-0" />
-                  ) : (
-                    <Check className="w-4 h-4 text-accent-green shrink-0" />
-                  )}
-                  <span className="flex-1 min-w-0 text-sm text-text-primary truncate">
-                    {r.name}
-                    {r.failed && <span className="text-xs text-accent-red ml-2">failed</span>}
-                  </span>
-                  {!r.pending && !r.failed && (
-                    <span className="text-xs text-text-secondary shrink-0">{r.calories} kcal</span>
-                  )}
-                  {r.pending && (
-                    <span className="text-xs text-text-secondary shrink-0">analyzing…</span>
-                  )}
-                  <button
-                    onClick={() => handleUndoQuickAdd(r.id)}
-                    className="ml-1 p-1.5 rounded-full text-accent-red hover:bg-red-50 active:bg-red-100 touch-manipulation"
-                    aria-label={`Remove ${r.name}`}
+              {recentlyAdded.map((r) => {
+                // Resolve the live entry so the refine sheet can show the photo
+                // + nutrition. Falls back to a stub for entries dropped from
+                // the day's list (rare race with polling).
+                const liveEntry = entries.find((e) => e.id === r.id);
+                const canRefine = liveEntry && !r.failed;
+                return (
+                  <li
+                    key={r.id}
+                    className={`flex items-center gap-2 px-3 py-2 bg-white rounded-apple border ${
+                      r.failed ? 'border-red-200' : r.pending ? 'border-blue-100' : 'border-green-100'
+                    }`}
                   >
-                    <X className="w-4 h-4" />
-                  </button>
-                </li>
-              ))}
+                    {r.failed ? (
+                      <AlertTriangle className="w-4 h-4 text-accent-red shrink-0" />
+                    ) : r.pending ? (
+                      <Loader2 className="w-4 h-4 text-accent-blue animate-spin shrink-0" />
+                    ) : (
+                      <Check className="w-4 h-4 text-accent-green shrink-0" />
+                    )}
+                    <button
+                      onClick={() => canRefine && setRefiningEntry(liveEntry)}
+                      disabled={!canRefine}
+                      className="flex-1 min-w-0 text-left flex items-center gap-2 active:opacity-70 disabled:opacity-100 disabled:active:opacity-100"
+                    >
+                      <span className="flex-1 min-w-0 text-sm text-text-primary truncate">
+                        {r.name}
+                        {r.failed && <span className="text-xs text-accent-red ml-2">failed</span>}
+                      </span>
+                      {!r.pending && !r.failed && (
+                        <span className="text-xs text-text-secondary shrink-0">{r.calories} kcal</span>
+                      )}
+                      {r.pending && (
+                        <span className="text-xs text-text-secondary shrink-0">analyzing…</span>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handleUndoQuickAdd(r.id)}
+                      className="ml-1 p-1.5 rounded-full text-accent-red hover:bg-red-50 active:bg-red-100 touch-manipulation"
+                      aria-label={`Remove ${r.name}`}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
             <p className="text-[11px] text-text-secondary mt-2">
-              Tap × to undo. This list clears when you change the day.
+              Tap a row to refine (e.g. &ldquo;only ate half&rdquo;) without re-uploading the photo. Tap × to undo.
             </p>
           </Card>
         )}
@@ -646,6 +662,17 @@ export default function AddFood() {
             }
             flashConfirmation(`Added ${portionItem.name} (${portion.label}) — ${portion.calories} kcal`);
             setPortionItem(null);
+          }}
+        />
+      )}
+
+      {refiningEntry && (
+        <RefineSheet
+          entry={refiningEntry}
+          onClose={() => setRefiningEntry(null)}
+          onSubmit={async (note) => {
+            await refine(refiningEntry.id, note);
+            flashConfirmation(`Refining ${refiningEntry.name}…`);
           }}
         />
       )}
