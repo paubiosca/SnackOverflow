@@ -648,6 +648,28 @@ export interface DailyActivity {
   restingHr: number | null;
 }
 
+// Range version for the calibration insight: pulls per-day burn over a window
+// so we can compute cumulative burn alongside cumulative consumed and the weight
+// trajectory.
+export async function getDailyActivityInRange(userId: string, startDate: string, endDate: string): Promise<DailyActivity[]> {
+  const r = await sql`
+    SELECT
+      date, active_kcal as "activeKcal", bmr_kcal as "bmrKcal", total_kcal as "totalKcal",
+      steps, resting_hr as "restingHr"
+    FROM daily_activity
+    WHERE user_id = ${userId} AND date >= ${startDate} AND date <= ${endDate}
+    ORDER BY date ASC
+  `;
+  return r.rows.map((row) => ({
+    date: row.date,
+    activeKcal: row.activeKcal !== null ? Number(row.activeKcal) : null,
+    bmrKcal: row.bmrKcal !== null ? Number(row.bmrKcal) : null,
+    totalKcal: row.totalKcal !== null ? Number(row.totalKcal) : null,
+    steps: row.steps !== null ? Number(row.steps) : null,
+    restingHr: row.restingHr !== null ? Number(row.restingHr) : null,
+  }));
+}
+
 export async function getDailyActivity(userId: string, date: string): Promise<DailyActivity | null> {
   const r = await sql`
     SELECT

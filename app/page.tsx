@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useProfile } from '@/hooks/useProfile';
 import { useFoodEntries } from '@/hooks/useFoodEntries';
 import { MealType, FoodEntry } from '@/lib/types';
-import { getActiveCaloriesForDate } from '@/lib/storage';
 import Card from '@/components/ui/Card';
 import BottomNav from '@/components/ui/BottomNav';
 import CalorieSummary from '@/components/dashboard/CalorieSummary';
@@ -15,21 +14,12 @@ import MealBreakdown from '@/components/dashboard/MealBreakdown';
 import MealSection from '@/components/dashboard/MealSection';
 import WaterTracker from '@/components/dashboard/WaterTracker';
 import WeightTracker from '@/components/dashboard/WeightTracker';
-import ActiveCaloriesTracker from '@/components/dashboard/ActiveCaloriesTracker';
 import WeeklyDeficitChart from '@/components/dashboard/WeeklyDeficitChart';
 import EditFoodModal from '@/components/food/EditFoodModal';
 import ClarifySheet from '@/components/food/ClarifySheet';
 import BurnedCaloriesTile from '@/components/dashboard/BurnedCaloriesTile';
+import CalibrationCard from '@/components/dashboard/CalibrationCard';
 import AlternativesCard from '@/components/food/AlternativesCard';
-
-// Helper to get local date string
-const getLocalDateString = (): string => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
 
 export default function Dashboard() {
   const router = useRouter();
@@ -38,20 +28,25 @@ export default function Dashboard() {
   const { entries, totals, getEntriesByMeal, remove, update, answerClarification, isLoading: entriesLoading } = useFoodEntries();
   const [editingEntry, setEditingEntry] = useState<FoodEntry | null>(null);
   const [clarifyingEntry, setClarifyingEntry] = useState<FoodEntry | null>(null);
+  // Active calories now come from Apple Health (auto-synced via the iOS Shortcut)
+  // instead of manual entry. 0 if no Health data has been ingested yet.
   const [activeCaloriesBurned, setActiveCaloriesBurned] = useState(0);
 
-  // Load active calories on mount
   useEffect(() => {
-    const today = getLocalDateString();
-    setActiveCaloriesBurned(getActiveCaloriesForDate(today));
+    fetch('/api/health/status')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const t = data?.today;
+        if (!t) return;
+        // Prefer the explicit active number; fall back to total - bmr.
+        const active = t.activeKcal ?? (t.totalKcal != null && t.bmrKcal != null ? t.totalKcal - t.bmrKcal : 0);
+        setActiveCaloriesBurned(Math.max(0, active ?? 0));
+      })
+      .catch(() => {});
   }, []);
 
-  // Adjusted calorie goal = base goal + active calories burned
+  // Dynamic-approach users get their active burn added to today's eating budget.
   const adjustedCalorieGoal = calorieGoal + activeCaloriesBurned;
-
-  const handleActiveCaloriesChange = useCallback((calories: number) => {
-    setActiveCaloriesBurned(calories);
-  }, []);
 
   useEffect(() => {
     if (status === 'loading') return;
@@ -110,8 +105,11 @@ export default function Dashboard() {
           <MealBreakdown entries={entries} />
         </Card>
 
-        {/* Burned calories from Terra (hidden until a wearable is connected) */}
+        {/* Burned calories from Apple Health (hidden until first ingest) */}
         <BurnedCaloriesTile consumedKcal={totals.calories} />
+
+        {/* Calibration insight: expected vs actual deficit (hidden until ~2 weeks of data) */}
+        <CalibrationCard />
 
         {/* Weekly Deficit Chart */}
         <WeeklyDeficitChart baseCalorieGoal={calorieGoal} />
@@ -124,12 +122,6 @@ export default function Dashboard() {
 
         {/* Weight Tracker */}
         <WeightTracker startingWeight={profile?.weightKg || 70} />
-
-        {/* Active Calories Tracker */}
-        <ActiveCaloriesTracker
-          goal={profile?.activeCalorieGoal || 450}
-          onActiveCaloriesChange={handleActiveCaloriesChange}
-        />
 
         {/* Meal Sections */}
         {mealTypes.map((mealType) => (

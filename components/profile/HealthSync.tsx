@@ -154,6 +154,28 @@ export default function HealthSync() {
           <p className="text-text-secondary text-xs italic">
             Tip: the same Shortcut works manually too — long-press it on the home screen and tap Run to backfill any day.
           </p>
+
+          <p className="font-medium pt-2 border-t border-border-light">One-time history backfill (optional)</p>
+          <p className="text-text-secondary text-xs">
+            Make a second Shortcut that loops over the last 30-90 days and POSTs them all at once.
+            The endpoint accepts an array of <code>{`{ date, active_kcal, bmr_kcal, steps, resting_hr }`}</code>.
+            Pattern:
+          </p>
+          <ol className="list-decimal list-inside space-y-1 text-text-secondary">
+            <li><b>Get Numbers from Input</b> = 30 (or however many days back you want).</li>
+            <li><b>Repeat with each</b> from 1 to 30:
+              <ul className="list-disc list-inside ml-4">
+                <li>Compute <code>day = today − n days</code>.</li>
+                <li>Pull Active/Basal/Steps/RHR for that day (Date Range = day to day+1).</li>
+                <li><b>Add to Dictionary</b>: build a per-day object with the same keys.</li>
+                <li><b>Add to List</b>: append the dictionary to a results list.</li>
+              </ul>
+            </li>
+            <li>One <b>Get Contents of URL</b> POST — Request Body: the list (JSON array). Same Bearer header.</li>
+          </ol>
+          <p className="text-text-secondary text-xs italic">
+            Run once. After that the daily Shortcut keeps things fresh.
+          </p>
         </div>
       )}
     </div>
