@@ -97,14 +97,68 @@ export default function SuggestionsRail({ mealType, onPick }: Props) {
   }
   if (items.length === 0) return null;
 
+  // Two-mode rail: 'pantry' shows only pantry chips, 'around' shows everything
+  // else (time-of-day / recent / frequent). Mode persists for the lifetime of
+  // the page; defaults to whichever has items.
+  const pantryItems = items.filter((i) => i.source === 'pantry');
+  const aroundItems = items.filter((i) => i.source !== 'pantry');
+  const defaultMode: 'pantry' | 'around' = pantryItems.length > 0 ? 'pantry' : 'around';
+  // Mode toggle is rendered inside the rail; we use a ref-less pattern via a
+  // useState in the parent function, hoisted via setMode below.
+  return <Rail
+    pantryItems={pantryItems}
+    aroundItems={aroundItems}
+    defaultMode={defaultMode}
+    addedKeys={addedKeys}
+    pendingKeys={pendingKeys}
+    onTap={(key, s) => handleTap(key, { ...s, mealType })}
+  />;
+}
+
+interface RailProps {
+  pantryItems: FoodSuggestion[];
+  aroundItems: FoodSuggestion[];
+  defaultMode: 'pantry' | 'around';
+  addedKeys: Set<string>;
+  pendingKeys: Set<string>;
+  onTap: (key: string, s: FoodSuggestion) => void;
+}
+function Rail({ pantryItems, aroundItems, defaultMode, addedKeys, pendingKeys, onTap }: RailProps) {
+  const [mode, setMode] = useState<'pantry' | 'around'>(defaultMode);
+  const visible = mode === 'pantry' ? pantryItems : aroundItems;
   return (
     <div className="-mx-4 px-4 mb-4">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-medium text-text-primary">Quick log</h3>
-        <span className="text-xs text-text-secondary">tap to add</span>
+        <div className="segmented-control flex">
+          <button
+            onClick={() => setMode('pantry')}
+            disabled={pantryItems.length === 0}
+            className={`segmented-control-item px-3 py-1 text-xs font-medium ${
+              mode === 'pantry' ? 'active text-text-primary' : 'text-text-secondary'
+            } disabled:opacity-40`}
+          >
+            Pantry
+            {pantryItems.length > 0 && <span className="ml-1 opacity-60">{pantryItems.length}</span>}
+          </button>
+          <button
+            onClick={() => setMode('around')}
+            disabled={aroundItems.length === 0}
+            className={`segmented-control-item px-3 py-1 text-xs font-medium ${
+              mode === 'around' ? 'active text-text-primary' : 'text-text-secondary'
+            } disabled:opacity-40`}
+          >
+            Around now
+          </button>
+        </div>
       </div>
+      {visible.length === 0 ? (
+        <div className="text-xs text-text-secondary py-3 px-1">
+          {mode === 'pantry' ? 'No pantry items yet — scan a receipt to add some.' : 'No history-based suggestions yet.'}
+        </div>
+      ) : (
       <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {items.map((s, i) => {
+        {visible.map((s, i) => {
           const meta = SOURCE_META[s.source];
           const key = `${s.source}-${s.name}-${i}`;
           const isAdded = addedKeys.has(key);
@@ -112,7 +166,7 @@ export default function SuggestionsRail({ mealType, onPick }: Props) {
           return (
             <button
               key={key}
-              onClick={() => handleTap(key, { ...s, mealType })}
+              onClick={() => onTap(key, s)}
               disabled={isPending}
               className={`relative shrink-0 px-3 py-2 rounded-2xl border text-left min-w-[140px] max-w-[200px] active:scale-95 transition-all duration-200 touch-manipulation ${
                 isAdded
@@ -129,7 +183,10 @@ export default function SuggestionsRail({ mealType, onPick }: Props) {
                 {s.source !== 'pantry' && s.occurrences && s.occurrences > 1 ? <span className="ml-auto">×{s.occurrences}</span> : null}
               </div>
               <div className="text-sm font-medium truncate mt-1">{s.name}</div>
-              <div className="text-xs opacity-80">{s.calories} kcal</div>
+              <div className="text-xs opacity-80">
+                {s.calories} kcal
+                {s.source === 'pantry' && (s.unit === 'g' || s.unit === 'ml') ? ` /100${s.unit}` : ''}
+              </div>
               {isAdded && (
                 <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-green-500/15 backdrop-blur-[1px]">
                   <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-green-600 text-white text-xs font-semibold shadow">
@@ -142,6 +199,7 @@ export default function SuggestionsRail({ mealType, onPick }: Props) {
           );
         })}
       </div>
+      )}
     </div>
   );
 }

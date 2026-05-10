@@ -8,6 +8,7 @@ import BottomNav from '@/components/ui/BottomNav';
 import Card from '@/components/ui/Card';
 import HealthSync from '@/components/profile/HealthSync';
 import StravaConnect from '@/components/profile/StravaConnect';
+import GoalSettings from '@/components/profile/GoalSettings';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Modal from '@/components/ui/Modal';
@@ -93,6 +94,9 @@ export default function Profile() {
       </header>
 
       <div className="px-4 py-4 space-y-4 page-transition">
+        {/* Editable: usual daily burn + weekly weight loss target */}
+        <GoalSettings />
+
         {/* Strava (Garmin runs) — primary source for running calories */}
         <StravaConnect />
 

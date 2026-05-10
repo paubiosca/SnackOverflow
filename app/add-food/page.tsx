@@ -12,6 +12,7 @@ import ProcessingTray from '@/components/food/ProcessingTray';
 import ClarifyCard from '@/components/food/ClarifyCard';
 import ReceiptCapture from '@/components/pantry/ReceiptCapture';
 import ReceiptReview, { ReviewItem } from '@/components/pantry/ReceiptReview';
+import PortionSheet, { ScaledPortion } from '@/components/food/PortionSheet';
 import { AlertTriangle, ChevronLeft, ChevronRight, Calendar, Camera, Image as ImageIcon, X, Check, Receipt, Loader2 } from 'lucide-react';
 import type { BulkPantryInput } from '@/lib/db';
 
@@ -98,6 +99,9 @@ export default function AddFood() {
   const [receiptItems, setReceiptItems] = useState<ReviewItem[]>([]);
   const [receiptStore, setReceiptStore] = useState<string | null>(null);
   const [receiptDate, setReceiptDate] = useState<string | null>(null);
+  // Pantry chip portion picker. Opens the bottom-sheet when a pantry chip
+  // is tapped so the user can pick "half / whole / 100g / etc.".
+  const [portionItem, setPortionItem] = useState<FoodSuggestion | null>(null);
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -183,6 +187,13 @@ export default function AddFood() {
   // One-tap log from a suggestion chip — full nutrition is already known, so this
   // is a synchronous insert (no LLM call). Fastest path in the app.
   const handlePickSuggestion = async (s: FoodSuggestion) => {
+    // Pantry chips open the portion sheet instead of logging immediately, so
+    // the user can pick "half this pack" etc. The sheet's onConfirm completes
+    // the actual log + decrement.
+    if (s.source === 'pantry') {
+      setPortionItem(s);
+      return;
+    }
     const created = await add({
       name: s.name,
       mealType: s.mealType,
@@ -192,10 +203,8 @@ export default function AddFood() {
       fat: s.fat,
       isManualEntry: false,
       date: getDateString(selectedDate),
-      // When the chip came from the pantry, link the new entry so the server
-      // knows to decrement the pantry stock for that item.
       pantryItemId: s.pantryItemId,
-      source: s.source === 'pantry' ? 'pantry' : 'recent',
+      source: 'recent',
     });
     if (created?.id) {
       setRecentlyAdded((prev) => [
@@ -287,6 +296,7 @@ export default function AddFood() {
       nutritionConfidence: it.nutritionConfidence,
       nutritionCitation: it.citation,
       productImageUrl: it.productImageUrl,
+      packGrams: it.packGrams,
     }));
     const r = await fetch('/api/pantry/items', {
       method: 'POST',
@@ -605,6 +615,38 @@ export default function AddFood() {
           remove(id);
         }}
       />
+
+      {portionItem && (
+        <PortionSheet
+          item={portionItem}
+          onClose={() => setPortionItem(null)}
+          onConfirm={async (portion: ScaledPortion) => {
+            const created = await add({
+              name: `${portionItem.name} (${portion.label})`,
+              mealType: portionItem.mealType,
+              calories: portion.calories,
+              protein: portion.protein,
+              carbs: portion.carbs,
+              fat: portion.fat,
+              isManualEntry: false,
+              date: getDateString(selectedDate),
+              pantryItemId: portionItem.pantryItemId,
+              source: 'pantry',
+              // Server reads this off the body and decrements pantry stock
+              // by exactly this much; not stored on the entry row itself.
+              pantryConsumeUnits: portion.units,
+            } as Parameters<typeof add>[0] & { pantryConsumeUnits?: number });
+            if (created?.id) {
+              setRecentlyAdded((prev) => [
+                { id: created.id, name: portionItem.name, calories: portion.calories },
+                ...prev.filter((r) => r.id !== created.id),
+              ]);
+            }
+            flashConfirmation(`Added ${portionItem.name} (${portion.label}) — ${portion.calories} kcal`);
+            setPortionItem(null);
+          }}
+        />
+      )}
 
       <BottomNav />
     </main>

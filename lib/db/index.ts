@@ -144,6 +144,7 @@ export async function createProfile(userId: string, profile: Omit<UserProfile, '
     goalValue: Number(row.goalValue),
     dailyWaterGoalMl: Number(row.dailyWaterGoalMl),
     activeCalorieGoal: Number(row.activeCalorieGoal),
+    tdeeBaselineKcal: row.tdeeBaselineKcal != null ? Number(row.tdeeBaselineKcal) : undefined,
     openaiApiKey: row.openaiApiKey,
     createdAt: row.createdAt,
   };
@@ -163,6 +164,7 @@ export async function updateProfile(userId: string, updates: Partial<UserProfile
       goal_value = COALESCE(${updates.goalValue ?? null}, goal_value),
       daily_water_goal_ml = COALESCE(${updates.dailyWaterGoalMl ?? null}, daily_water_goal_ml),
       active_calorie_goal = COALESCE(${updates.activeCalorieGoal ?? null}, active_calorie_goal),
+      tdee_baseline_kcal = COALESCE(${updates.tdeeBaselineKcal ?? null}, tdee_baseline_kcal),
       openai_api_key = COALESCE(${updates.openaiApiKey ?? null}, openai_api_key),
       updated_at = NOW()
     WHERE user_id = ${userId}
@@ -174,6 +176,7 @@ export async function updateProfile(userId: string, updates: Partial<UserProfile
       goal_type as "goalType",
       goal_value as "goalValue", daily_water_goal_ml as "dailyWaterGoalMl",
       COALESCE(active_calorie_goal, 450) as "activeCalorieGoal",
+      tdee_baseline_kcal as "tdeeBaselineKcal",
       openai_api_key as "openaiApiKey", created_at as "createdAt"
   `;
 
@@ -193,6 +196,7 @@ export async function updateProfile(userId: string, updates: Partial<UserProfile
     goalValue: Number(row.goalValue),
     dailyWaterGoalMl: Number(row.dailyWaterGoalMl),
     activeCalorieGoal: Number(row.activeCalorieGoal),
+    tdeeBaselineKcal: row.tdeeBaselineKcal != null ? Number(row.tdeeBaselineKcal) : undefined,
     openaiApiKey: row.openaiApiKey,
     createdAt: row.createdAt,
   };
@@ -261,9 +265,12 @@ export async function addFoodEntry(userId: string, entry: Partial<FoodEntry> & P
     ]
   );
   // If this entry consumed something from the pantry, decrement the stock so
-  // the chip stops appearing once the user has eaten through it.
+  // the chip stops appearing once the user has eaten through it. The caller
+  // may pass `pantryConsumeUnits` (e.g. 0.5 for "half this pack"); defaults to
+  // 1 unit when not provided.
   if (entry.pantryItemId && status === 'resolved') {
-    await decrementPantryItem(userId, entry.pantryItemId, 1).catch(() => {});
+    const units = (entry as Partial<FoodEntry> & { pantryConsumeUnits?: number }).pantryConsumeUnits;
+    await decrementPantryItem(userId, entry.pantryItemId, typeof units === 'number' && units > 0 ? units : 1).catch(() => {});
   }
   return rowToFoodEntry(result.rows[0]);
 }
@@ -488,7 +495,7 @@ export async function getFoodSuggestions(userId: string, opts?: { limit?: number
   const pantryRows = await sql`
     SELECT
       id, normalized_name AS "normalizedName",
-      qty_remaining AS "qtyRemaining", unit,
+      qty_remaining AS "qtyRemaining", unit, pack_grams AS "packGrams",
       est_calories_per_unit AS "kcal",
       est_protein_per_unit AS "protein",
       est_carbs_per_unit AS "carbs",
@@ -500,7 +507,6 @@ export async function getFoodSuggestions(userId: string, opts?: { limit?: number
     LIMIT 12
   `;
   const pantrySuggestions: FoodSuggestion[] = pantryRows.rows.map((row): FoodSuggestion => {
-    // Default meal type for pantry: time-of-day heuristic (caller passes mealType to onPick).
     const mealType: MealType =
       hour >= 5 && hour < 11 ? 'breakfast' :
       hour >= 11 && hour < 15 ? 'lunch' :
@@ -515,6 +521,8 @@ export async function getFoodSuggestions(userId: string, opts?: { limit?: number
       fat: Math.round(Number(row.fat) || 0),
       pantryItemId: row.id,
       qtyRemaining: Number(row.qtyRemaining),
+      unit: (row.unit as 'g' | 'item' | 'ml') ?? 'item',
+      packGrams: row.packGrams != null ? Number(row.packGrams) : undefined,
     };
   });
 
