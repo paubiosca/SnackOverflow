@@ -270,8 +270,10 @@ export default function History() {
         </Card>
 
         <Card>
-          <h2 className="font-semibold text-text-primary mb-3">This week</h2>
-          <WeekStats days={last7} targetDeficit={targetDeficit} />
+          <h2 className="font-semibold text-text-primary mb-3">
+            {range === 7 ? 'This week' : 'Last 30 days'}
+          </h2>
+          <WeekStats days={days} targetDeficit={targetDeficit} />
         </Card>
       </div>
 
