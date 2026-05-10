@@ -109,20 +109,21 @@ export default function History() {
       const totals = calculateDailyTotals(entries);
       const act = activityByDate[date];
       const stravaKcal = act?.stravaKcal ?? 0;
-      // Prefer same-day measured Apple Health total when present (it already
-      // includes basal + walking for that specific day). Fall back to the
-      // user's calibrated baseline. Add Strava run kcal on top.
+      // Apple-Health-style energy balance: bars represent (consumed − TDEE).
+      // Negative = real deficit, positive = real surplus. Goal field on the
+      // chart is now TDEE itself (the "burn"); the planned deficit D is
+      // rendered as a separate target line by DeficitBarStrip.
       const nonRunningBurn = act?.totalKcal ?? baseline;
       const dailyTdee = nonRunningBurn + stravaKcal;
-      const dailyTarget = Math.max(1200, dailyTdee - targetDeficit);
       return {
         date,
         consumed: totals.calories,
-        goal: dailyTarget,
+        goal: dailyTdee,           // midline of the chart is now total burn
+        burnedKcal: dailyTdee,     // shown as a tiny number below each bar
         hasData: entries.length > 0,
       };
     });
-  }, [window, entriesByDate, activityByDate, baseline, targetDeficit]);
+  }, [window, entriesByDate, activityByDate, baseline]);
 
   const last7 = useMemo(() => days.slice(-Math.min(7, days.length)), [days]);
 

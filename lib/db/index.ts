@@ -526,15 +526,15 @@ export async function getFoodSuggestions(userId: string, opts?: { limit?: number
     };
   });
 
-  // Pantry chips first (they're the freshest/most-actionable), then history.
-  // De-dupe by name so a pantry item doesn't double up with a recent log of
-  // the same name.
+  // De-dupe history against pantry by name, but DO NOT cap the merged length
+  // by `limit`. The UI splits these into two tabs (pantry / around-now) and
+  // capping the total kills the history tab whenever the pantry alone fills
+  // up the limit. Each side is already individually limited by its SQL query.
   const seen = new Set(pantrySuggestions.map((p) => p.name.toLowerCase()));
-  const merged = [
+  return [
     ...pantrySuggestions,
     ...fromHistory.filter((h) => !seen.has(h.name.toLowerCase())),
   ];
-  return merged.slice(0, limit);
 }
 
 // History of resolved entries grouped by lower(name) within an optional mealType filter,

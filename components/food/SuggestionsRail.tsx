@@ -133,22 +133,21 @@ function Rail({ pantryItems, aroundItems, defaultMode, addedKeys, pendingKeys, o
         <div className="segmented-control flex">
           <button
             onClick={() => setMode('pantry')}
-            disabled={pantryItems.length === 0}
             className={`segmented-control-item px-3 py-1 text-xs font-medium ${
               mode === 'pantry' ? 'active text-text-primary' : 'text-text-secondary'
-            } disabled:opacity-40`}
+            }`}
           >
             Pantry
             {pantryItems.length > 0 && <span className="ml-1 opacity-60">{pantryItems.length}</span>}
           </button>
           <button
             onClick={() => setMode('around')}
-            disabled={aroundItems.length === 0}
             className={`segmented-control-item px-3 py-1 text-xs font-medium ${
               mode === 'around' ? 'active text-text-primary' : 'text-text-secondary'
-            } disabled:opacity-40`}
+            }`}
           >
             Around now
+            {aroundItems.length > 0 && <span className="ml-1 opacity-60">{aroundItems.length}</span>}
           </button>
         </div>
       </div>
