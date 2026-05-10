@@ -78,17 +78,17 @@ export default function WeekStats({ days, targetDeficit }: Props) {
         </span>
       </div>
 
-      {/* Weight projections from the avg surplus. 7700 kcal ≈ 1 kg fat.
-          avg = mean(consumed − TDEE), so avg < 0 = real deficit = losing,
-          avg > 0 = surplus = gaining. weeklyKg has the SAME sign as avg, so
-          a negative kg here means a physical weight LOSS — render as "−Ng". */}
+      {/* Weight projections. In WeekStats, `avg` = mean(TDEE − consumed),
+          so positive avg = real deficit = body-mass LOSS. Body-mass change is
+          the OPPOSITE sign: weightChange = consumed − TDEE = −avg.
+          7700 kcal ≈ 1 kg fat. */}
       {logged.length >= 3 && (() => {
-        const weeklyKg = (avg * 7) / 7700;
-        const monthlyKg = (avg * 30) / 7700;
+        const weeklyKg = (-avg * 7) / 7700;   // + = gained, − = lost
+        const monthlyKg = (-avg * 30) / 7700;
         const fmt = (kg: number) => {
-          // kg < 0 → losing → minus + green. kg > 0 → gaining → plus + red.
-          const sign = kg < 0 ? '−' : kg > 0 ? '+' : '';
-          const tone = kg < 0 ? 'text-accent-green' : kg > 0 ? 'text-accent-red' : 'text-text-primary';
+          // kg > 0 → gained → '+' red. kg < 0 → lost → '−' green.
+          const sign = kg > 0 ? '+' : kg < 0 ? '−' : '';
+          const tone = kg > 0 ? 'text-accent-red' : kg < 0 ? 'text-accent-green' : 'text-text-primary';
           const abs = Math.abs(kg);
           const display = abs < 1 ? `${Math.round(abs * 1000)} g` : `${abs.toFixed(1)} kg`;
           return { sign, tone, display };

@@ -503,6 +503,7 @@ export async function getFoodSuggestions(userId: string, opts?: { limit?: number
     FROM pantry_items
     WHERE user_id = ${userId} AND status = 'active' AND qty_remaining > 0
       AND est_calories_per_unit IS NOT NULL
+      AND COALESCE(purchased_at, created_at) >= NOW() - INTERVAL '10 days'
     ORDER BY purchased_at DESC NULLS LAST
     LIMIT 12
   `;
@@ -585,6 +586,7 @@ export async function getFoodHistoryByMealType(
 
 // Pantry operations
 export async function getActivePantryItems(userId: string): Promise<PantryItem[]> {
+  await purgeStalePantryItems(userId).catch(() => {});
   const result = await sql`
     SELECT
       id, raw_text as "rawText", normalized_name as "normalizedName",
@@ -697,6 +699,27 @@ export async function bulkInsertPantryItems(userId: string, items: BulkPantryInp
   return inserted;
 }
 
+// Sweep pantry items purchased more than `days` days ago. Called opportunistically
+// on pantry reads so the list stays fresh without needing a cron job. Items missing
+// `purchased_at` fall back to `created_at`.
+export async function purgeStalePantryItems(userId: string, days: number = 10): Promise<number> {
+  const r = await sql.query(
+    `DELETE FROM pantry_items
+     WHERE user_id = $1
+       AND COALESCE(purchased_at, created_at) < NOW() - ($2 || ' days')::interval`,
+    [userId, String(days)]
+  );
+  return r.rowCount ?? 0;
+}
+
+export async function deletePantryItem(userId: string, id: string): Promise<boolean> {
+  const r = await sql.query(
+    `DELETE FROM pantry_items WHERE id = $1 AND user_id = $2`,
+    [id, userId]
+  );
+  return (r.rowCount ?? 0) > 0;
+}
+
 export interface ReceiptItem {
   id: string;
   normalizedName: string;
@@ -727,6 +750,7 @@ export interface ReceiptGroup {
 // the calendar day (truncated) so multiple inserts in the same trip collapse
 // into a single receipt entry.
 export async function getReceiptHistory(userId: string, opts?: { limit?: number }): Promise<ReceiptGroup[]> {
+  await purgeStalePantryItems(userId).catch(() => {});
   const limit = opts?.limit ?? 100;
   const r = await sql.query(
     `SELECT

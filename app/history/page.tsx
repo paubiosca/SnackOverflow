@@ -50,7 +50,7 @@ interface ActivityRow {
 export default function History() {
   const { data: session } = useSession();
   const { profile, calorieGoal } = useProfile();
-  const [range, setRange] = useState<Range>(30);
+  const [range, setRange] = useState<Range>(7);
   const [entriesByDate, setEntriesByDate] = useState<Record<string, FoodEntry[]>>({});
   const [activityByDate, setActivityByDate] = useState<Record<string, ActivityRow>>({});
   const [selectedDate, setSelectedDate] = useState<string | null>(null);

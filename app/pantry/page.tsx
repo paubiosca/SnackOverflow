@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import BottomNav from '@/components/ui/BottomNav';
 import Card from '@/components/ui/Card';
-import { ChevronDown, ChevronUp, ExternalLink, Database, Sparkles, ShieldCheck, ShoppingBasket, Receipt as ReceiptIcon, AlertTriangle } from 'lucide-react';
+import { ChevronDown, ChevronUp, ExternalLink, Database, Sparkles, ShieldCheck, ShoppingBasket, Receipt as ReceiptIcon, AlertTriangle, Trash2 } from 'lucide-react';
 import type { ReceiptGroup, ReceiptItem } from '@/lib/db';
 
 const SOURCE_BADGE: Record<string, { label: string; tone: string; icon: React.ReactNode }> = {
@@ -37,6 +37,27 @@ export default function PantryPage() {
     return () => { cancelled = true; };
   }, [session]);
 
+  const handleDelete = async (itemId: string) => {
+    const prev = groups;
+    // optimistic: drop the item, drop empty groups
+    setGroups((gs) =>
+      gs
+        .map((g) => ({ ...g, items: g.items.filter((it) => it.id !== itemId) }))
+        .map((g) => ({
+          ...g,
+          itemCount: g.items.reduce((s, it) => s + it.qty, 0),
+          totalKcal: g.items.reduce((s, it) => s + (it.kcalPerUnit != null ? it.kcalPerUnit * it.qty : 0), 0),
+        }))
+        .filter((g) => g.items.length > 0)
+    );
+    try {
+      const r = await fetch(`/api/pantry/items/${itemId}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error('delete failed');
+    } catch {
+      setGroups(prev);
+    }
+  };
+
   return (
     <main className="min-h-screen pb-24">
       <header
@@ -65,6 +86,7 @@ export default function PantryPage() {
               group={g}
               isOpen={openIdx === idx}
               onToggle={() => setOpenIdx(openIdx === idx ? null : idx)}
+              onDeleteItem={handleDelete}
             />
           ))
         )}
@@ -75,7 +97,7 @@ export default function PantryPage() {
   );
 }
 
-function ReceiptCard({ group, isOpen, onToggle }: { group: ReceiptGroup; isOpen: boolean; onToggle: () => void }) {
+function ReceiptCard({ group, isOpen, onToggle, onDeleteItem }: { group: ReceiptGroup; isOpen: boolean; onToggle: () => void; onDeleteItem: (id: string) => void }) {
   const date = new Date(group.purchasedAt);
   const dateLabel = isFinite(date.getTime())
     ? date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
@@ -101,7 +123,7 @@ function ReceiptCard({ group, isOpen, onToggle }: { group: ReceiptGroup; isOpen:
         <div className="mt-3 -mx-1">
           <ul className="divide-y divide-border-light">
             {group.items.map((it) => (
-              <ItemRow key={it.id} item={it} />
+              <ItemRow key={it.id} item={it} onDelete={() => onDeleteItem(it.id)} />
             ))}
           </ul>
         </div>
@@ -110,11 +132,12 @@ function ReceiptCard({ group, isOpen, onToggle }: { group: ReceiptGroup; isOpen:
   );
 }
 
-function ItemRow({ item }: { item: ReceiptItem }) {
+function ItemRow({ item, onDelete }: { item: ReceiptItem; onDelete: () => void }) {
   const meta = SOURCE_BADGE[item.nutritionSource ?? 'manual'] ?? SOURCE_BADGE.manual;
   const totalKcal =
     item.kcalPerUnit != null ? Math.round(item.kcalPerUnit * item.qty) : null;
   const stale = item.qtyRemaining <= 0;
+  const [confirming, setConfirming] = useState(false);
   return (
     <li className="py-2.5 px-1">
       <div className="flex items-start gap-2.5">
@@ -163,6 +186,31 @@ function ItemRow({ item }: { item: ReceiptItem }) {
             )}
           </div>
         </div>
+        {confirming ? (
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={onDelete}
+              className="text-[11px] font-semibold text-red-600 px-2 py-1 rounded-md bg-red-50 hover:bg-red-100"
+              aria-label={`Confirm delete ${item.normalizedName}`}
+            >
+              Delete
+            </button>
+            <button
+              onClick={() => setConfirming(false)}
+              className="text-[11px] text-text-secondary px-2 py-1 rounded-md hover:bg-secondary-bg"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirming(true)}
+            className="shrink-0 p-1.5 rounded-md text-text-secondary hover:text-red-600 hover:bg-red-50"
+            aria-label={`Delete ${item.normalizedName}`}
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        )}
       </div>
     </li>
   );
