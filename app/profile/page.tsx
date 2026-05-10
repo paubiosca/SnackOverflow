@@ -7,6 +7,7 @@ import { useProfile } from '@/hooks/useProfile';
 import BottomNav from '@/components/ui/BottomNav';
 import Card from '@/components/ui/Card';
 import HealthSync from '@/components/profile/HealthSync';
+import HealthImport from '@/components/profile/HealthImport';
 import QuickBackfill from '@/components/profile/QuickBackfill';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -93,10 +94,13 @@ export default function Profile() {
       </header>
 
       <div className="px-4 py-4 space-y-4 page-transition">
-        {/* Apple Health sync (iOS Shortcut) */}
+        {/* One-off backfill via Apple Health Export ZIP (the easiest free path) */}
+        <HealthImport />
+
+        {/* Apple Health sync (iOS Shortcut) — for ongoing daily updates */}
         <HealthSync />
 
-        {/* Quick backfill: type-one-number fallback for users who don't want the Shortcut */}
+        {/* Quick backfill: type-one-number fallback if you don't want any of the above */}
         <QuickBackfill />
 
         {/* User info */}

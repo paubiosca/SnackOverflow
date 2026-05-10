@@ -282,14 +282,17 @@ function BarStripSkeleton({ count }: { count: number }) {
   });
   return (
     <div className="select-none">
-      <div className="flex items-end justify-center px-1" style={{ height: HALF * 2 + 16, gap: `${gap}px` }}>
+      <div className="relative flex justify-center px-1" style={{ height: HALF * 2, gap: `${gap}px` }}>
+        <div
+          className="absolute left-0 right-0 border-t border-dashed border-border-light pointer-events-none"
+          style={{ top: HALF }}
+        />
         {heights.map((h, i) => (
-          <div key={i} className="flex flex-col items-center" style={{ height: HALF * 2 + 16, width: barWidth }}>
-            <div className="flex items-end justify-center" style={{ height: HALF, width: '100%' }}>
+          <div key={i} className="flex flex-col items-stretch" style={{ height: HALF * 2, width: barWidth }}>
+            <div className="flex items-end justify-center" style={{ height: HALF }}>
               {aboves[i] && <Skeleton className="w-full rounded-t-sm" style={{ height: h }} />}
             </div>
-            <div className="w-full border-t border-dashed border-border-light" />
-            <div className="flex items-start justify-center" style={{ height: HALF, width: '100%' }}>
+            <div className="flex items-start justify-center" style={{ height: HALF }}>
               {!aboves[i] && <Skeleton className="w-full rounded-b-sm" style={{ height: h }} />}
             </div>
           </div>

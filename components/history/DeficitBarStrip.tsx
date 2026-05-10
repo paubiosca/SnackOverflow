@@ -5,35 +5,34 @@ import { useMemo } from 'react';
 export interface DayPoint {
   date: string; // YYYY-MM-DD
   consumed: number;
-  goal: number; // base goal for that day (already includes planned deficit)
+  goal: number;
   hasData: boolean;
 }
 
 interface Props {
-  days: DayPoint[]; // chronological, oldest -> newest, length up to 30
-  targetDeficit: number; // |D|, the planned daily deficit, e.g. 500
+  days: DayPoint[];
+  targetDeficit: number;
   selectedDate: string | null;
   onSelect: (date: string) => void;
 }
 
-// Diverging bar strip: midline is the calorie goal. Bars grow up (green) when
-// the user ate under goal (extra deficit) and down (red) when they went over.
-// Heights are normalized to the planned daily deficit so a full-height bar
-// equals "doubled your planned deficit" or "lost a full day".
+// Diverging bar strip: a single horizontal midline runs the full width of the
+// chart at vertical center. Each day is two stacked half-columns: the top half
+// grows downward toward the midline (under-goal = green/gold), the bottom half
+// grows upward away from the midline (over-goal = red).
 export default function DeficitBarStrip({ days, targetDeficit, selectedDate, onSelect }: Props) {
-  const D = Math.max(100, targetDeficit); // safety floor; keeps the math sane
-  const HALF = 64; // pixels per side of the midline; tuned for iPhone viewport
-  // Bar width grows when the window is short so 7-day view feels solid.
+  const D = Math.max(100, targetDeficit);
+  const HALF = 64;
+  const HEIGHT = HALF * 2;
   const barWidth = days.length <= 7 ? 28 : days.length <= 14 ? 18 : 10;
   const gap = days.length <= 7 ? 6 : 3;
 
   const items = useMemo(() => {
     return days.map((d) => {
-      const delta = d.goal - d.consumed; // positive = under goal
-      // Cap visual at 1.5×D in either direction so outliers don't crush the rest.
+      const delta = d.goal - d.consumed;
       const cappedRatio = Math.max(-1.5, Math.min(1.5, delta / D));
-      const height = Math.abs(cappedRatio) * HALF;
-      return { ...d, delta, ratio: delta / D, height, cappedRatio };
+      const height = Math.min(HALF, Math.abs(cappedRatio) * HALF);
+      return { ...d, delta, height, overflow: Math.abs(cappedRatio) > 1 };
     });
   }, [days, D]);
 
@@ -42,41 +41,43 @@ export default function DeficitBarStrip({ days, targetDeficit, selectedDate, onS
   return (
     <div className="select-none">
       <div
-        className="flex items-end justify-center px-1"
-        style={{ height: HALF * 2 + 16, gap: `${gap}px` }}
+        className="relative flex justify-center px-1"
+        style={{ height: HEIGHT, gap: `${gap}px` }}
       >
+        {/* Single midline drawn behind the bars, spanning the full chart width. */}
+        <div
+          className="absolute left-0 right-0 border-t border-dashed border-border-light pointer-events-none"
+          style={{ top: HALF }}
+        />
+
         {items.map((d) => {
           const above = d.delta >= 0;
           const isSelected = d.date === selectedDate;
           const isToday = d.date === todayStr;
-          const overflow = Math.abs(d.cappedRatio) > 1;
 
           return (
             <button
               key={d.date}
               onClick={() => onSelect(d.date)}
-              className="relative flex flex-col items-center justify-center group"
-              style={{ height: HALF * 2 + 16, width: barWidth, WebkitTapHighlightColor: 'transparent' }}
+              className="relative flex flex-col items-stretch"
+              style={{ height: HEIGHT, width: barWidth, WebkitTapHighlightColor: 'transparent' }}
               aria-label={`${d.date}: ${d.consumed} kcal, goal ${d.goal}`}
             >
-              {/* Top half (under-goal, positive deficit) */}
-              <div className="flex items-end justify-center" style={{ height: HALF, width: '100%' }}>
-                {above && d.hasData && (
+              {/* Top half: bar sits at the bottom of this half, grows upward. */}
+              <div className="flex items-end justify-center" style={{ height: HALF }}>
+                {above && d.hasData && d.height > 0 && (
                   <div
                     className={`w-full rounded-t-sm transition-all ${
-                      overflow ? 'bg-amber-400' : 'bg-accent-green'
+                      d.overflow ? 'bg-amber-400' : 'bg-accent-green'
                     } ${isSelected ? 'ring-2 ring-text-primary ring-offset-1' : ''}`}
                     style={{ height: Math.max(2, d.height) }}
                   />
                 )}
               </div>
 
-              {/* Midline */}
-              <div className="w-full border-t border-dashed border-border-light" />
-
-              {/* Bottom half (over-goal, surplus) */}
-              <div className="flex items-start justify-center" style={{ height: HALF, width: '100%' }}>
-                {!above && d.hasData && (
+              {/* Bottom half: bar sits at the top of this half, grows downward. */}
+              <div className="flex items-start justify-center" style={{ height: HALF }}>
+                {!above && d.hasData && d.height > 0 && (
                   <div
                     className={`w-full rounded-b-sm transition-all bg-accent-red ${
                       isSelected ? 'ring-2 ring-text-primary ring-offset-1' : ''
@@ -86,16 +87,14 @@ export default function DeficitBarStrip({ days, targetDeficit, selectedDate, onS
                 )}
               </div>
 
-              {/* Today marker */}
               {isToday && (
-                <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-accent-blue" />
+                <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-accent-blue" />
               )}
             </button>
           );
         })}
       </div>
 
-      {/* Legend */}
       <div className="flex items-center justify-between mt-3 text-[11px] text-text-secondary">
         <span>{days.length > 0 ? formatShort(days[0].date) : ''}</span>
         <span className="flex items-center gap-3">
