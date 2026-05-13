@@ -32,12 +32,12 @@ const formatDate = (date: Date): string => {
   return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 };
 
-const getDateString = (date: Date): string => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
+// IMPORTANT: must use UTC, not local-time getters. Food entries are stored
+// under their UTC date (that's what useFoodEntries() defaults to and what
+// /api/food keys on), so a local-date string here would query a day that has
+// no rows and render the page blank after midnight UTC has shifted forward
+// of midnight local — exactly what happened on 2026-05-14.
+const getDateString = (date: Date): string => date.toISOString().slice(0, 10);
 
 const suggestMealType = (): MealType => {
   const hour = new Date().getHours();
