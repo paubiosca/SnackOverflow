@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useProfile } from '@/hooks/useProfile';
 import { useFoodEntries } from '@/hooks/useFoodEntries';
+import { CONSIDERING_MARKER } from '@/lib/calories';
 import { MealType, FoodSuggestion } from '@/lib/types';
 import BottomNav from '@/components/ui/BottomNav';
 import Card from '@/components/ui/Card';
@@ -17,11 +18,6 @@ import RefineSheet from '@/components/food/RefineSheet';
 import type { FoodEntry } from '@/lib/types';
 import { AlertTriangle, ChevronLeft, ChevronRight, Calendar, Camera, Image as ImageIcon, X, Check, Receipt, Loader2 } from 'lucide-react';
 import type { BulkPantryInput } from '@/lib/db';
-
-// Sentinel stored in `notes` to mark a "Just curious" entry. The DB schema
-// has no status enum value for this, so the notes field doubles as the marker.
-// MealSection reads this exact string and renders the row distinctly.
-const CONSIDERING_MARKER = '__considering__';
 
 // Cap multi-photo bundles. Each high-detail image costs ~1k input tokens to
 // the vision model, so we keep this tight to avoid runaway analysis costs.
@@ -56,9 +52,9 @@ type Intent = 'eating' | 'curious';
 type ReceiptStage = 'idle' | 'capture' | 'parsing' | 'review';
 
 export default function AddFood() {
-  const { profile } = useProfile();
+  const { profile, calorieGoal } = useProfile();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const { entries, logAsync, add, remove, update, answerClarification, refine } = useFoodEntries(getDateString(selectedDate));
+  const { entries, totals, logAsync, add, remove, update, answerClarification, refine } = useFoodEntries(getDateString(selectedDate));
 
   const [error, setError] = useState<string | null>(null);
   const [selectedMealType, setSelectedMealType] = useState<MealType>(suggestMealType());
@@ -79,7 +75,9 @@ export default function AddFood() {
 
   // Keep the strip in sync with entry status: a pending logAsync row gets its
   // real name/calories once the worker resolves it, and falls into a failed
-  // state if the worker errors. We match by id so reordering doesn't matter.
+  // state if the worker errors. Any non-pending status flips the row out of
+  // the loading spinner — needs_clarification and considering both count as
+  // "done analyzing" from the strip's perspective.
   useEffect(() => {
     setRecentlyAdded((prev) => {
       if (prev.length === 0) return prev;
@@ -88,13 +86,21 @@ export default function AddFood() {
         const e = entries.find((x) => x.id === r.id);
         if (!e) return r;
         const status = e.status ?? 'resolved';
-        if (status === 'resolved' && (r.pending || r.name !== e.name || r.calories !== (e.calories ?? 0))) {
-          changed = true;
-          return { id: r.id, name: e.name || r.name, calories: e.calories ?? 0, pending: false };
+        if (status === 'failed') {
+          if (!r.failed) {
+            changed = true;
+            return { ...r, failed: true, pending: false };
+          }
+          return r;
         }
-        if (status === 'failed' && !r.failed) {
+        if (status === 'pending') return r;
+        // Anything else (resolved, needs_clarification, etc.) — adopt the
+        // entry's current name/calories and drop the spinner.
+        const liveName = e.name || r.name;
+        const liveCalories = e.calories ?? 0;
+        if (r.pending || r.failed || r.name !== liveName || r.calories !== liveCalories) {
           changed = true;
-          return { ...r, failed: true, pending: false };
+          return { id: r.id, name: liveName, calories: liveCalories, pending: false };
         }
         return r;
       });
@@ -338,7 +344,21 @@ export default function AddFood() {
         className="bg-white px-4 pb-4 sticky top-0 z-40 shadow-sm"
         style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
       >
-        <h1 className="text-2xl font-bold text-text-primary mb-3">Add Food</h1>
+        <div className="flex items-end justify-between mb-3">
+          <h1 className="text-2xl font-bold text-text-primary">Add Food</h1>
+          <div className="text-right leading-tight">
+            <div className="text-xs text-text-secondary">
+              {isToday ? 'Today' : formatDate(selectedDate)}
+            </div>
+            <div className="text-sm font-mono text-text-primary">
+              <span className="font-semibold">{totals.calories.toLocaleString()}</span>
+              {calorieGoal ? (
+                <span className="text-text-secondary"> / {calorieGoal.toLocaleString()}</span>
+              ) : null}
+              <span className="text-text-secondary"> kcal</span>
+            </div>
+          </div>
+        </div>
 
         <div className="flex items-center justify-center gap-2 bg-secondary-bg rounded-apple p-2">
           <button onClick={goToPreviousDay} className="p-2 hover:bg-white rounded-full transition-colors">

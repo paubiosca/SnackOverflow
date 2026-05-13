@@ -2,15 +2,11 @@
 
 import { useMemo } from 'react';
 import { FoodEntry, MealType, MEAL_LABELS } from '@/lib/types';
+import { CONSIDERING_MARKER } from '@/lib/calories';
 import Card from '@/components/ui/Card';
 import { Sunrise, Sun, Moon, Cookie, Trash2, ChevronDown, ChevronUp, Loader2, AlertCircle, XCircle, Utensils } from 'lucide-react';
 import { ReactNode, useState } from 'react';
 
-// Sentinel value the add-food page writes into `notes` for "Just curious"
-// entries. Used here to render the row visually distinct (dashed/faded) and
-// expose Eat-it / Discard inline actions. We piggy-back on `notes` because
-// the schema has no separate enum value for this state.
-const CONSIDERING_MARKER = '__considering__';
 const isConsidering = (e: FoodEntry) => e.notes === CONSIDERING_MARKER;
 
 // Visual indicator for the async lifecycle of an entry. The "where" is

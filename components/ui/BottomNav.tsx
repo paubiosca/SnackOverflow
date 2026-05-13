@@ -13,7 +13,7 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: '/', label: 'Today', icon: <BarChart3 className="w-5 h-5" /> },
+  { href: '/today', label: 'Today', icon: <BarChart3 className="w-5 h-5" /> },
   { href: '/history', label: 'History', icon: <Calendar className="w-5 h-5" /> },
   { href: '/add-food', label: 'Add', icon: <Plus className="w-6 h-6 text-white" />, isMain: true },
   { href: '/profile', label: 'Profile', icon: <User className="w-5 h-5" /> },

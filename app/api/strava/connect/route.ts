@@ -14,6 +14,15 @@ export async function GET(request: NextRequest) {
   }
   const base = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;
   const redirectUri = `${base}/api/strava/callback`;
-  const url = authorizationUrl(redirectUri, session.user.id);
-  return NextResponse.json({ url });
+  try {
+    const url = authorizationUrl(redirectUri, session.user.id);
+    return NextResponse.json({ url });
+  } catch (err) {
+    // requireEnv throws when STRAVA_CLIENT_ID is missing. Without this catch
+    // the client just sees a generic 500 and the alert reads "Connect failed",
+    // which is exactly the case where you most need to know which env is missing.
+    const message = err instanceof Error ? err.message : 'Strava is not configured';
+    console.error('[strava/connect]', message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

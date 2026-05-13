@@ -1,5 +1,11 @@
 import { ActivityLevel, Gender, GoalType, UserProfile, FoodEntry, ActivityApproach } from './types';
 
+// "Just curious" entries park in the DB with this sentinel in `notes` so the
+// UI can render them greyed-out. They must NOT count toward consumed calories.
+// Kept here (not in the component) so every consumer of calculateDailyTotals
+// honors the exclusion automatically.
+export const CONSIDERING_MARKER = '__considering__';
+
 // Activity level multipliers for TDEE calculation
 const ACTIVITY_MULTIPLIERS: Record<ActivityLevel, number> = {
   sedentary: 1.2,
@@ -184,6 +190,7 @@ export function calculateDailyTotals(entries: FoodEntry[]): {
     (totals, entry) => {
       const status = entry.status ?? 'resolved';
       if (status === 'failed' || status === 'pending') return totals;
+      if (entry.notes === CONSIDERING_MARKER) return totals;
       return {
         calories: totals.calories + entry.calories,
         protein: totals.protein + entry.protein,

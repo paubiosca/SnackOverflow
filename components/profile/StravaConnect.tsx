@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Activity, Check, Loader2, RefreshCw } from 'lucide-react';
+import { Activity, AlertTriangle, Check, Loader2, RefreshCw } from 'lucide-react';
 
 interface RecentActivity {
   type: string;
@@ -27,8 +27,20 @@ export default function StravaConnect() {
   const [connecting, setConnecting] = useState(false);
   const [backfilling, setBackfilling] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // Config health: which Strava env vars are missing in the running deploy.
+  // null = not checked yet, [] = healthy, non-empty = misconfigured.
+  const [missingEnv, setMissingEnv] = useState<string[] | null>(null);
 
   const refresh = async () => {
+    // Probe config first so even an unconfigured deploy renders a clear warning
+    // instead of just a broken "Connect Strava" button. /api/strava/health is
+    // public and cheap; it returns 503 with `missing: [...]` when env is bad.
+    try {
+      const h = await fetch('/api/strava/health').then((r) => r.json());
+      setMissingEnv(Array.isArray(h?.missing) ? h.missing : []);
+    } catch {
+      setMissingEnv([]);
+    }
     const res = await fetch('/api/strava/status');
     if (!res.ok) { setLoading(false); return; }
     const data = await res.json();
@@ -87,6 +99,19 @@ export default function StravaConnect() {
         <Activity className="w-5 h-5 text-orange-500" />
         <h3 className="font-semibold text-text-primary">Strava (Garmin runs)</h3>
       </div>
+
+      {missingEnv && missingEnv.length > 0 && (
+        <div className="mb-3 flex gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <div className="min-w-0">
+            <p className="font-medium">Strava is not configured on this deploy.</p>
+            <p className="mt-0.5 text-amber-800">
+              Missing env vars: <span className="font-mono">{missingEnv.join(', ')}</span>. Add them in
+              Vercel → Project Settings → Environment Variables and redeploy.
+            </p>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="text-sm text-text-secondary flex items-center gap-2">

@@ -129,7 +129,11 @@ export function useFoodEntries(date?: string) {
 
       // Fire-and-forget worker dispatch. The browser keeps the request alive even
       // if the user navigates; failures are surfaced via the row's `failed` status.
-      fetch(`/api/food/${pendingEntry.id}/process`, { method: 'POST' }).catch((err) =>
+      // `keepalive` keeps the request alive across navigation/tab close so the
+      // worker still runs if the user immediately leaves /add-food. Without it,
+      // some browsers cancel the in-flight request and the row stays pending
+      // in the DB forever — surfaces as a stuck spinner in the "Just added" strip.
+      fetch(`/api/food/${pendingEntry.id}/process`, { method: 'POST', keepalive: true }).catch((err) =>
         console.error('[useFoodEntries] worker dispatch failed', err)
       );
 
@@ -154,7 +158,7 @@ export function useFoodEntries(date?: string) {
       if (!res.ok) return null;
       const { entry: updated } = await res.json();
       setEntries((prev) => prev.map((e) => (e.id === id ? updated : e)));
-      fetch(`/api/food/${id}/process`, { method: 'POST' }).catch((err) =>
+      fetch(`/api/food/${id}/process`, { method: 'POST', keepalive: true }).catch((err) =>
         console.error('[useFoodEntries] worker dispatch failed', err)
       );
       return updated as FoodEntry;
@@ -176,7 +180,7 @@ export function useFoodEntries(date?: string) {
       if (!res.ok) return null;
       const { entry: updated } = await res.json();
       setEntries((prev) => prev.map((e) => (e.id === id ? updated : e)));
-      fetch(`/api/food/${id}/process`, { method: 'POST' }).catch((err) =>
+      fetch(`/api/food/${id}/process`, { method: 'POST', keepalive: true }).catch((err) =>
         console.error('[useFoodEntries] worker dispatch failed', err)
       );
       return updated as FoodEntry;
