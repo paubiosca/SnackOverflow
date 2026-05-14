@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { sql } from '@vercel/postgres';
+import { getFoodEntries } from '@/lib/db';
 
 // Auth-gated diagnostic that answers "is prod looking at the right user in the
 // right database". Returns:
@@ -52,12 +53,28 @@ export async function GET() {
   const todayLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const todayUtc = now.toISOString().slice(0, 10);
 
+  // Mirror what /api/food returns to the History page, but only the first 3
+  // rows — so we can see whether the JSON-serialized `date` field arrives as
+  // a 'YYYY-MM-DD' string, a full ISO timestamp, or something else. This is
+  // the smoking gun for the "history bars are zero" symptom.
+  const sample = await getFoodEntries(sessionUserId);
+  const sampleDates = sample.slice(0, 3).map((e) => ({
+    id: e.id,
+    name: e.name,
+    rawDate: e.date as unknown,
+    typeofDate: typeof e.date,
+    afterJsonSplit: typeof e.date === 'string'
+      ? (e.date as string).split('T')[0]
+      : null,
+  }));
+
   return NextResponse.json({
     authenticated: true,
     sessionUserId,
     userInDb: u.rows[0] ?? null,
     foodEntries: fe.rows[0],
     last7DaysByDate: byDay.rows,
+    sampleDates,
     usersInThisDatabase: usersTotal.rows[0].n,
     database: db.rows[0],
     sessionEmail: session.user.email ?? null,
