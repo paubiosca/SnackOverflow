@@ -32,12 +32,18 @@ const formatDate = (date: Date): string => {
   return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 };
 
-// IMPORTANT: must use UTC, not local-time getters. Food entries are stored
-// under their UTC date (that's what useFoodEntries() defaults to and what
-// /api/food keys on), so a local-date string here would query a day that has
-// no rows and render the page blank after midnight UTC has shifted forward
-// of midnight local — exactly what happened on 2026-05-14.
-const getDateString = (date: Date): string => date.toISOString().slice(0, 10);
+// Use LOCAL date for "today" — the user's wall clock is what "today" means
+// to them, and useFoodEntries defaults to the same local convention so the
+// dashboard and add-food agree. UTC-based formatting rolls over before
+// midnight local on any positive offset (BST/CEST), which is exactly how
+// the dashboard showed an empty day after 01:00 BST on 2026-05-14 while
+// entries were sitting in the DB under the prior local date.
+const getDateString = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
 
 const suggestMealType = (): MealType => {
   const hour = new Date().getHours();

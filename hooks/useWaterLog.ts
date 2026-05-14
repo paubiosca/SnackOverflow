@@ -10,7 +10,9 @@ export function useWaterLog(date?: string) {
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
-  const targetDate = date || new Date().toISOString().split('T')[0];
+  // Local-date default — see useFoodEntries for the BST/UTC rollover rationale.
+  const _now = new Date();
+  const targetDate = date || `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
 
   const loadLogs = useCallback(async () => {
     if (!session?.user) {

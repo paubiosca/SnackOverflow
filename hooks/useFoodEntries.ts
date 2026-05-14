@@ -10,7 +10,16 @@ export function useFoodEntries(date?: string) {
   const [entries, setEntries] = useState<FoodEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  const targetDate = date || new Date().toISOString().split('T')[0];
+  // Use the user's LOCAL date for "today". toISOString() returns UTC, which
+  // rolls over before midnight local for any positive UTC offset — e.g. at
+  // 01:00 BST it's already 2026-05-14 in UTC but still "yesterday" to the
+  // user, so a UTC-based default queries an empty day and the dashboard
+  // renders zero even though the entries are sitting in the DB under the
+  // local date. The server stores `date` from the client-supplied value,
+  // so local-everywhere is the consistent choice.
+  const today = new Date();
+  const todayLocal = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const targetDate = date || todayLocal;
 
   const loadEntries = useCallback(async () => {
     if (!session?.user) {
