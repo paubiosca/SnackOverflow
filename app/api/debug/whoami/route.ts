@@ -36,13 +36,34 @@ export async function GET() {
   const usersTotal = await sql`SELECT COUNT(*)::int AS n FROM users`;
   const db = await sql`SELECT current_database() AS db, inet_server_addr()::text AS addr, current_setting('TimeZone') AS tz`;
 
+  // Per-day counts for the last 7 days — so the response shows exactly which
+  // dates have data. Mirrors what the history page builds its window over.
+  const byDay = await sql`
+    SELECT date::text AS date, COUNT(*)::int AS n
+    FROM food_entries
+    WHERE user_id = ${sessionUserId}
+    AND date >= CURRENT_DATE - INTERVAL '7 days'
+    GROUP BY date ORDER BY date DESC
+  `;
+
+  // What the Node process running this request thinks "today" is, both UTC
+  // and "local" (which on Vercel is UTC because TZ defaults to UTC).
+  const now = new Date();
+  const todayLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const todayUtc = now.toISOString().slice(0, 10);
+
   return NextResponse.json({
     authenticated: true,
     sessionUserId,
     userInDb: u.rows[0] ?? null,
     foodEntries: fe.rows[0],
+    last7DaysByDate: byDay.rows,
     usersInThisDatabase: usersTotal.rows[0].n,
     database: db.rows[0],
     sessionEmail: session.user.email ?? null,
+    nodeNowIso: now.toISOString(),
+    nodeTodayLocal: todayLocal,
+    nodeTodayUtc: todayUtc,
+    nodeTz: process.env.TZ ?? '(unset; default UTC on Vercel)',
   });
 }
