@@ -1,15 +1,18 @@
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
-import Google from 'next-auth/providers/google';
 import { compare, hash } from 'bcryptjs';
 import { sql } from '@vercel/postgres';
+import authConfig from './auth.config';
+
+// Full NextAuth config. Extends the Edge-safe slice in auth.config.ts with the
+// Credentials provider (uses bcryptjs + Postgres, neither of which work on
+// Edge) and the Google signIn DB-write callback. Middleware imports only the
+// Edge slice, so this file's Node-only deps never end up in the Edge bundle.
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  ...authConfig,
   providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    }),
+    ...authConfig.providers,
     Credentials({
       name: 'credentials',
       credentials: {
@@ -53,6 +56,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
+    ...authConfig.callbacks,
     async signIn({ user, account }) {
       if (account?.provider === 'google') {
         try {
@@ -99,25 +103,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
       return true;
     },
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (session.user && token.id) {
-        session.user.id = token.id as string;
-      }
-      return session;
-    },
-  },
-  pages: {
-    signIn: '/login',
-    newUser: '/onboarding',
-  },
-  session: {
-    strategy: 'jwt',
   },
 });
 
